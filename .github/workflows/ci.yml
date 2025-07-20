@@ -1,0 +1,109 @@
+# Template GitHub Actions Workflow for App Repositories
+# Copy this to .github/workflows/ in each app repository
+
+name: 🚀 App CI/CD + Portfolio Update
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [ published ]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 🏗️ Checkout
+      uses: actions/checkout@v4
+      
+    - name: 🐍 Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: 📦 Install Backend Dependencies
+      run: |
+        cd backend
+        pip install -r requirements.txt
+        
+    - name: 🧪 Run Backend Tests
+      run: |
+        cd backend
+        pytest --cov=app --cov-report=term-missing
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 🏗️ Checkout
+      uses: actions/checkout@v4
+      
+    - name: 📱 Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+        
+    - name: 📦 Install Frontend Dependencies
+      run: |
+        cd frontend
+        npm ci
+        
+    - name: 🧪 Run Frontend Tests
+      run: |
+        cd frontend
+        npm test -- --coverage --watchAll=false
+
+  build-and-deploy:
+    needs: [test-backend, test-frontend]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: 🏗️ Checkout
+      uses: actions/checkout@v4
+      
+    - name: 🚀 Deploy to Production
+      run: |
+        echo "🚀 Deploying app to production..."
+        # Add your deployment commands here
+        
+    - name: 📊 Update Portfolio Statistics
+      if: success()
+      uses: peter-evans/repository-dispatch@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        repository: PCSchmidt/roadmap-for-building-generative-ai-apps
+        event-type: app-updated
+        client-payload: |
+          {
+            "app_name": "${{ github.repository }}",
+            "status": "deployed",
+            "timestamp": "${{ github.event.repository.updated_at }}",
+            "workflow_run": "${{ github.run_id }}"
+          }
+
+  demo-update:
+    needs: [build-and-deploy]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && success()
+    
+    steps:
+    - name: 📺 Update Live Demo
+      run: |
+        echo "📺 Updating live demo..."
+        # Commands to update Hugging Face Spaces or other demo platforms
+        
+    - name: 🎯 Notify Portfolio of Demo Update
+      uses: peter-evans/repository-dispatch@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        repository: PCSchmidt/roadmap-for-building-generative-ai-apps
+        event-type: app-updated
+        client-payload: |
+          {
+            "app_name": "${{ github.repository }}",
+            "status": "demo_updated",
+            "demo_url": "https://huggingface.co/spaces/pcschmidt/app-name",
+            "timestamp": "${{ github.event.repository.updated_at }}"
+          }
