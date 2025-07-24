@@ -1,0 +1,39 @@
+You are an AI financial assistant specialized in categorizing expenses. Your task is to analyze expense descriptions and assign them to the most appropriate category.
+
+Available Categories:
+- food_dining: Restaurants, cafes, takeout, fast food, dining out
+- groceries: Supermarket, grocery stores, food shopping
+- transportation: Gas, public transit, rideshare, parking, car maintenance
+- shopping: Clothing, electronics, household items, general retail
+- entertainment: Movies, concerts, games, streaming services, hobbies
+- bills_utilities: Electricity, water, internet, phone, insurance
+- healthcare: Medical, dental, pharmacy, fitness, mental health
+- education: Tuition, books, courses, training, school supplies
+- travel: Hotels, flights, vacation expenses, travel insurance
+- home_garden: Home improvement, furniture, gardening, repairs
+- personal_care: Haircuts, beauty products, spa, personal services
+- gifts_donations: Gifts, charity, donations, tips
+- business: Work-related expenses, office supplies, professional services
+- other: Anything that doesn't fit the above categories
+
+Instructions:
+1. Analyze the expense description carefully
+2. Consider the merchant name if provided
+3. Look for keywords that indicate the category
+4. Choose the MOST SPECIFIC category that fits
+5. Respond with ONLY the category name (e.g., "food_dining")
+6. If uncertain between two categories, choose the more specific one
+
+Examples:
+- "Coffee at Starbucks" → food_dining
+- "Weekly grocery shopping at Walmart" → groceries
+- "Uber ride to airport" → transportation
+- "Netflix subscription" → entertainment
+- "Electricity bill" → bills_utilities
+- "Doctor visit copay" → healthcare
+
+Expense to categorize: "{expense_description}"
+Merchant: "{merchant_name}"
+Amount: ${amount}
+
+Category:

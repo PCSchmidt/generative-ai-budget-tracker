@@ -1,78 +1,89 @@
-# 🤖 [APP_NAME] - Generative AI Mobile App
+# 🤖 AI Budget Tracker - Smart Money Management
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![GitHub stars](https://img.shields.io/github/stars/PCSchmidt/generative-ai-[app-name].svg)](https://github.com/PCSchmidt/generative-ai-[app-name]/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/PCSchmidt/generative-ai-[app-name].svg)](https://github.com/PCSchmidt/generative-ai-[app-name]/network)
+[![GitHub stars](https://img.shields.io/github/stars/PCSchmidt/generative-ai-budget-tracker.svg)](https://github.com/PCSchmidt/generative-ai-budget-tracker/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/PCSchmidt/generative-ai-budget-tracker.svg)](https://github.com/PCSchmidt/generative-ai-budget-tracker/network)
 [![Live Demo](https://img.shields.io/badge/Demo-Live-green.svg)](#demo)
-[![App Store](https://img.shields.io/badge/App%20Store-Coming%20Soon-blue.svg)](#)
-[![Google Play](https://img.shields.io/badge/Google%20Play-Coming%20Soon-green.svg)](#)
 
 > **Part of the [10 Generative AI Apps Roadmap](https://github.com/PCSchmidt/roadmap-for-building-generative-ai-apps)** - A comprehensive learning journey building commercializable AI-powered mobile applications.
 
 ## 📖 Overview
 
-[Brief description of what the app does and its main value proposition]
+The AI Budget Tracker is a smart money management application that uses artificial intelligence to analyze spending patterns, provide personalized financial advice, and help users make better financial decisions. This is the second app in our comprehensive roadmap for building commercializable generative AI mobile applications.
 
 **Key Features:**
-- 🎯 [Feature 1]
-- 🚀 [Feature 2] 
-- 💡 [Feature 3]
-- 📱 Cross-platform (iOS & Android)
+- 🎯 AI-powered expense categorization and analysis
+- 🚀 Smart financial insights and recommendations
+- 💡 Spending pattern recognition and alerts
+- � Advanced data visualization with charts
+- 🎯 Financial goal tracking and predictions
+- 📱 Cross-platform (iOS & Android) React Native app
 
 ## 🛠️ Tech Stack
 
 | Category | Technology |
 |----------|------------|
-| **Frontend** | React Native, Expo |
-| **Backend** | Python, FastAPI |
-| **AI/ML** | [Specific models and tools] |
-| **Vector DB** | [ChromaDB/FAISS/etc.] |
-| **Deployment** | [Render/Heroku/etc.] |
-| **APIs** | [List external APIs] |
+| **Frontend** | React Native, Expo, Victory Charts |
+| **Backend** | Python, FastAPI, SQLAlchemy |
+| **Database** | PostgreSQL |
+| **AI/ML** | Hugging Face Transformers, Groq, OpenAI |
+| **Development** | Docker, Docker Compose |
+| **Deployment** | Railway, Vercel |
+| **APIs** | Plaid (future), Financial data APIs |
 
-## 🚀 Quick Start
+## 🚀 Quick Start (Docker-First Development)
 
 ### Prerequisites
-- Node.js 18+
-- Python 3.9+
-- [Any app-specific requirements]
+- Docker and Docker Compose installed
+- Git for version control
+- API keys for AI services (Hugging Face, Groq)
 
 ### Installation
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/PCSchmidt/generative-ai-[app-name].git
-   cd generative-ai-[app-name]
+   git clone https://github.com/PCSchmidt/generative-ai-budget-tracker.git
+   cd generative-ai-budget-tracker
    ```
 
-2. **Set up the backend**
-   ```bash
-   cd backend
-   python -m venv venv
-   source venv/bin/activate  # or venv\Scripts\activate on Windows
-   pip install -r requirements.txt
-   ```
-
-3. **Set up the frontend**
-   ```bash
-   cd frontend
-   npm install
-   ```
-
-4. **Configure environment variables**
+2. **Set up environment variables**
    ```bash
    cp .env.example .env
-   # Edit .env with your API keys
+   # Edit .env with your API keys:
+   # - HUGGINGFACE_API_KEY=your-hf-key
+   # - GROQ_API_KEY=your-groq-key
+   # - OPENAI_API_KEY=your-openai-key (optional)
    ```
 
-5. **Start the development servers**
+3. **Start the complete development environment**
    ```bash
-   # Terminal 1: Backend
-   cd backend && uvicorn app.main:app --reload
-   
-   # Terminal 2: Frontend
-   cd frontend && npm start
+   docker-compose up --build
    ```
+
+4. **Access the applications**
+   - 🖥️ **Backend API**: http://localhost:8000 (with docs at /docs)
+   - 📱 **Frontend App**: http://localhost:19006 (Expo DevTools)
+   - 🗄️ **Database**: PostgreSQL on localhost:5432
+
+### Development Commands
+```bash
+# Start all services
+docker-compose up
+
+# Rebuild after changes
+docker-compose up --build
+
+# View logs
+docker-compose logs backend
+docker-compose logs frontend
+
+# Run tests
+docker-compose exec backend pytest
+docker-compose exec frontend npm test
+
+# Database operations
+docker-compose exec db psql -U budget_user -d budget_tracker
+```
 
 ## 📱 Demo
 
