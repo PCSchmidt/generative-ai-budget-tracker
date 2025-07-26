@@ -12,7 +12,7 @@
     "lint": "eslint .",
     "build": "expo build",
     "vercel-build": "npm run build:html",
-    "build:html": "node -e \"const fs=require('fs'),path=require('path'); fs.copyFileSync('web-frontend/index.html','index.html'); fs.copyFileSync('priority4_dashboard.html','priority4.html'); console.log('✅ Copied web-frontend/index.html to index.html'); console.log('✅ Copied priority4_dashboard.html to priority4.html');\"",
+    "build:html": "node -e \"const fs=require('fs'),path=require('path'); fs.copyFileSync('web-frontend/index.html','index.html'); fs.copyFileSync('priority4-demo.html','priority4.html'); console.log('✅ Copied web-frontend/index.html to index.html'); console.log('✅ Copied priority4-demo.html to priority4.html');\"",
     "docker:frontend": "docker-compose up frontend",
     "docker:build": "docker-compose up --build"
   },

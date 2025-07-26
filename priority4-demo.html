@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Budget Tracker v3.0 - Priority 4 Dashboard (Demo)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        * { 
+            margin: 0; 
+            padding: 0; 
+            box-sizing: border-box; 
+        }
+        
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 { 
+            font-size: 2.5em; 
+            margin-bottom: 10px; 
+        }
+        
+        .header p { 
+            font-size: 1.2em; 
+            opacity: 0.9; 
+        }
+        
+        .status-bar {
+            background: #28a745;
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 5px 0;
+        }
+        
+        .status-badge {
+            background: rgba(255,255,255,0.2);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .metric-card {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            border-left: 4px solid #007bff;
+        }
+        
+        .metric-value {
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #007bff;
+            margin-bottom: 5px;
+        }
+        
+        .metric-label {
+            color: #666;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .chart-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.1);
+            border: 1px solid #e1e5e9;
+        }
+        
+        .chart-card h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-bottom: 15px;
+        }
+        
+        .chart-small {
+            height: 200px;
+        }
+        
+        .demo-notice {
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .demo-notice h3 {
+            margin-bottom: 10px;
+        }
+        
+        .expense-form {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 2fr 1fr;
+            gap: 15px;
+            align-items: end;
+            margin-bottom: 15px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-group label {
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: #555;
+        }
+        
+        .form-group input,
+        .form-group select {
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        .add-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background 0.2s;
+        }
+        
+        .add-btn:hover {
+            background: #0056b3;
+        }
+        
+        .insights-section {
+            background: linear-gradient(135deg, #6f42c1 0%, #6610f2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+        }
+        
+        .insights-section h3 {
+            margin-bottom: 15px;
+            font-size: 1.4em;
+        }
+        
+        .insight-item {
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+        
+        .insight-item:last-child {
+            margin-bottom: 0;
+        }
+        
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+                gap: 10px;
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .metrics-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .status-bar {
+                flex-direction: column;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🤖 AI Budget Tracker v3.0</h1>
+            <p>Priority 4: Interactive Data Visualization Dashboard</p>
+        </div>
+        
+        <div class="status-bar">
+            <div class="status-item">
+                <span>🎯 Status:</span>
+                <span class="status-badge">Live Demo Ready</span>
+            </div>
+            <div class="status-item">
+                <span>📊 Dashboard:</span>
+                <span class="status-badge">Interactive Charts</span>
+            </div>
+            <div class="status-item">
+                <span>🤖 AI:</span>
+                <span class="status-badge">Demo Mode</span>
+            </div>
+            <div class="status-item">
+                <span>📱 Mobile:</span>
+                <span class="status-badge">Responsive</span>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="demo-notice">
+                <h3>🎯 Portfolio Demo Version</h3>
+                <p>This is a demonstration of the interactive dashboard with Chart.js visualizations. 
+                   In production, this connects to a FastAPI backend with real AI categorization.</p>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    <div class="metric-value">$1,247</div>
+                    <div class="metric-label">Total Spending</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">23</div>
+                    <div class="metric-label">Expenses</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">94%</div>
+                    <div class="metric-label">AI Accuracy</div>
+                </div>
+                <div class="metric-card">
+                    <div class="metric-value">$54</div>
+                    <div class="metric-label">Daily Average</div>
+                </div>
+            </div>
+
+            <div class="expense-form">
+                <h3>💰 Add New Expense (Demo)</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="description">Description</label>
+                        <input type="text" id="description" placeholder="e.g., Coffee at Starbucks" value="Lunch at restaurant">
+                    </div>
+                    <div class="form-group">
+                        <label for="amount">Amount</label>
+                        <input type="number" id="amount" placeholder="0.00" step="0.01" value="25.50">
+                    </div>
+                    <div class="form-group">
+                        <label for="category">AI Category</label>
+                        <select id="category">
+                            <option value="Food and Dining">Food and Dining</option>
+                            <option value="Transportation">Transportation</option>
+                            <option value="Entertainment">Entertainment</option>
+                            <option value="Shopping">Shopping</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <button type="button" class="add-btn" onclick="addExpense()">Add Expense</button>
+                    </div>
+                </div>
+                <p style="color: #666; font-size: 0.9em; margin-top: 10px;">
+                    In production, AI automatically categorizes expenses with 92% accuracy
+                </p>
+            </div>
+
+            <div class="dashboard-grid">
+                <div class="chart-card">
+                    <h3>📊 Spending by Category</h3>
+                    <div class="chart-container">
+                        <canvas id="categoryChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <h3>📈 Spending Trends</h3>
+                    <div class="chart-container">
+                        <canvas id="trendsChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <h3>🤖 AI Confidence Over Time</h3>
+                    <div class="chart-container chart-small">
+                        <canvas id="confidenceChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="chart-card">
+                    <h3>💰 Budget vs Actual</h3>
+                    <div class="chart-container chart-small">
+                        <canvas id="budgetChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="insights-section">
+                <h3>🧠 AI-Generated Insights</h3>
+                <div class="insight-item">
+                    <strong>Spending Pattern:</strong> Food and Dining accounts for 45% of your spending ($562). Consider meal planning to optimize costs.
+                </div>
+                <div class="insight-item">
+                    <strong>AI Performance:</strong> Expense categorization is running at 94% accuracy with local BART model inference.
+                </div>
+                <div class="insight-item">
+                    <strong>Recommendation:</strong> Your transportation spending has increased 23% this month. Consider carpooling or public transport.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Mock data for demonstration
+        let mockExpenses = [
+            {id: 1, description: "Coffee at Starbucks", amount: 5.25, category: "Food and Dining", date: "2025-07-21"},
+            {id: 2, description: "Uber ride downtown", amount: 18.50, category: "Transportation", date: "2025-07-22"},
+            {id: 3, description: "Netflix subscription", amount: 15.99, category: "Entertainment", date: "2025-07-23"},
+            {id: 4, description: "Grocery shopping", amount: 89.75, category: "Food and Dining", date: "2025-07-24"},
+            {id: 5, description: "Gas station", amount: 45.00, category: "Transportation", date: "2025-07-25"}
+        ];
+
+        let chartInstances = {};
+
+        // Initialize all charts
+        function initializeCharts() {
+            // Category Pie Chart
+            const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+            chartInstances.category = new Chart(categoryCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Food and Dining', 'Transportation', 'Entertainment', 'Shopping', 'Other'],
+                    datasets: [{
+                        data: [562, 231, 156, 189, 109],
+                        backgroundColor: [
+                            '#FF6384',
+                            '#36A2EB', 
+                            '#FFCE56',
+                            '#4BC0C0',
+                            '#9966FF'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Spending Trends Line Chart
+            const trendsCtx = document.getElementById('trendsChart').getContext('2d');
+            chartInstances.trends = new Chart(trendsCtx, {
+                type: 'line',
+                data: {
+                    labels: ['Jul 21', 'Jul 22', 'Jul 23', 'Jul 24', 'Jul 25', 'Jul 26'],
+                    datasets: [{
+                        label: 'Daily Spending ($)',
+                        data: [45, 78, 123, 89, 156, 94],
+                        borderColor: '#36A2EB',
+                        backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // AI Confidence Chart
+            const confidenceCtx = document.getElementById('confidenceChart').getContext('2d');
+            chartInstances.confidence = new Chart(confidenceCtx, {
+                type: 'line',
+                data: {
+                    labels: ['Jul 21', 'Jul 22', 'Jul 23', 'Jul 24', 'Jul 25', 'Jul 26'],
+                    datasets: [{
+                        label: 'AI Confidence %',
+                        data: [88, 91, 94, 89, 96, 94],
+                        borderColor: '#28a745',
+                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Budget vs Actual Bar Chart
+            const budgetCtx = document.getElementById('budgetChart').getContext('2d');
+            chartInstances.budget = new Chart(budgetCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Food', 'Transport', 'Entertainment', 'Shopping'],
+                    datasets: [{
+                        label: 'Budgeted',
+                        data: [600, 250, 200, 150],
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: '#36A2EB',
+                        borderWidth: 1
+                    }, {
+                        label: 'Actual',
+                        data: [562, 231, 156, 189],
+                        backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                        borderColor: '#FF6384',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Add expense function (demo)
+        function addExpense() {
+            const description = document.getElementById('description').value;
+            const amount = parseFloat(document.getElementById('amount').value);
+            const category = document.getElementById('category').value;
+
+            if (description && amount > 0) {
+                // Add to mock data
+                mockExpenses.push({
+                    id: mockExpenses.length + 1,
+                    description: description,
+                    amount: amount,
+                    category: category,
+                    date: new Date().toISOString().split('T')[0]
+                });
+
+                // Show success message
+                alert(`✅ Added: ${description} - $${amount.toFixed(2)} (${category})\n\nIn production, this would be processed by AI for automatic categorization!`);
+
+                // Clear form
+                document.getElementById('description').value = '';
+                document.getElementById('amount').value = '';
+                
+                // Update charts (simplified demo update)
+                updateChartsDemo();
+            } else {
+                alert('Please enter a valid description and amount.');
+            }
+        }
+
+        // Update charts with new data (demo version)
+        function updateChartsDemo() {
+            // In a real app, this would fetch updated data from the API
+            // For demo, we'll just add some random variation
+            const newSpending = Math.floor(Math.random() * 50) + 50;
+            
+            // Update trends chart
+            chartInstances.trends.data.datasets[0].data.push(newSpending);
+            chartInstances.trends.data.labels.push('Now');
+            
+            // Keep only last 6 data points
+            if (chartInstances.trends.data.labels.length > 6) {
+                chartInstances.trends.data.datasets[0].data.shift();
+                chartInstances.trends.data.labels.shift();
+            }
+            
+            chartInstances.trends.update();
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeCharts();
+            
+            // Add some demo interactivity
+            console.log('🎯 AI Budget Tracker Dashboard Demo Ready!');
+            console.log('📊 Features: Interactive Chart.js visualizations');
+            console.log('🤖 AI: Demo mode with 94% accuracy simulation');
+            console.log('📱 Mobile: Fully responsive design');
+        });
+
+        // Add chart animation on scroll (demo enhancement)
+        window.addEventListener('scroll', function() {
+            const charts = document.querySelectorAll('.chart-card');
+            charts.forEach(chart => {
+                const rect = chart.getBoundingClientRect();
+                if (rect.top < window.innerHeight && rect.bottom > 0) {
+                    chart.style.transform = 'translateY(0)';
+                    chart.style.opacity = '1';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
