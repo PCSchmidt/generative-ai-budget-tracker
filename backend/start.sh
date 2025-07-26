@@ -13,5 +13,5 @@ fi
 echo "Starting FastAPI server on port $PORT"
 echo "Environment: $(env | grep -E '^(PORT|DATABASE_URL|DEBUG)=')"
 
-# Start the FastAPI application
-exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --access-log
+# Start the FastAPI application (lightweight version)
+exec uvicorn app.main_light:app --host 0.0.0.0 --port "$PORT" --access-log

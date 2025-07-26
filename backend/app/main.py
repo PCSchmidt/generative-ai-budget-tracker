@@ -16,11 +16,13 @@ try:
     from .ai_categorizer import expense_categorizer
     from .expense_db import expense_db
     from .spending_analyzer import spending_analyzer
+    from .visualization_api import viz_router, viz_service
 except ImportError:
     # Fall back to absolute imports (for direct execution)
     from ai_categorizer import expense_categorizer
     from expense_db import expense_db
     from spending_analyzer import spending_analyzer
+    from visualization_api import viz_router, viz_service
 
 # Create FastAPI application
 app = FastAPI(
@@ -37,6 +39,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(viz_router)
 
 # Pydantic models for request/response
 class ExpenseRequest(BaseModel):
@@ -61,6 +66,10 @@ class ExpenseResponse(BaseModel):
 async def startup_event():
     """Initialize database connection on startup"""
     await expense_db.init_pool()
+    
+    # Initialize visualization service with database connections
+    viz_service.expense_db = expense_db
+    viz_service.spending_analyzer = spending_analyzer
 
 # In-memory storage for fallback (will be removed once database is stable)
 expenses_storage: List[Dict] = []
