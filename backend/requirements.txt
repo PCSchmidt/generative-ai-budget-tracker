@@ -1,15 +1,25 @@
-# Minimal FastAPI setup for initial testing
-# Add AI libraries after basic deployment works
-
-# Core FastAPI only
+# AI Budget Tracker - Production Dependencies
+# Core FastAPI
 fastapi==0.104.1
 uvicorn[standard]==0.24.0
 python-multipart==0.0.6
 
 # Database 
 asyncpg==0.29.0
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
 
-# Basic utilities
+# AI and ML for expense categorization
+transformers==4.36.0
+torch==2.1.0
+huggingface-hub==0.19.4
+groq==0.4.1
+
+# Data processing
+pandas==2.1.4
+numpy==1.25.2
+
+# Utilities
 python-dotenv==1.0.0
 pydantic==2.5.0
 httpx==0.25.2
