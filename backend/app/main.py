@@ -11,8 +11,16 @@ from datetime import datetime, date
 from typing import Optional, Dict, List
 
 # Import our services
-from ai_categorizer import expense_categorizer
-from expense_db import expense_db
+try:
+    # Try relative imports first (for uvicorn)
+    from .ai_categorizer import expense_categorizer
+    from .expense_db import expense_db
+    from .spending_analyzer import spending_analyzer
+except ImportError:
+    # Fall back to absolute imports (for direct execution)
+    from ai_categorizer import expense_categorizer
+    from expense_db import expense_db
+    from spending_analyzer import spending_analyzer
 
 # Create FastAPI application
 app = FastAPI(
@@ -458,6 +466,88 @@ async def get_analytics(days: int = 30):
             }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get analytics: {str(e)}")
+
+# Priority 3: Advanced Spending Analytics Endpoints
+@app.get("/api/analytics/patterns")
+async def get_spending_patterns(days: int = 30):
+    """Get comprehensive spending pattern analysis"""
+    try:
+        # Initialize spending analyzer with database connection
+        spending_analyzer.expense_db = expense_db
+        
+        analysis = await spending_analyzer.analyze_spending_patterns(days=days)
+        return {
+            "status": "success",
+            "analysis": analysis,
+            "api_version": "3.0.0",
+            "features": ["patterns", "insights", "recommendations", "anomalies"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Pattern analysis failed: {str(e)}")
+
+@app.get("/api/analytics/insights")
+async def get_financial_insights(days: int = 30):
+    """Get AI-generated financial insights"""
+    try:
+        spending_analyzer.expense_db = expense_db
+        analysis = await spending_analyzer.analyze_spending_patterns(days=days)
+        
+        return {
+            "status": "success",
+            "insights": analysis["insights"],
+            "recommendations": analysis["recommendations"],
+            "period_days": days,
+            "total_expenses": analysis["total_expenses"],
+            "total_amount": analysis["total_amount"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Insights generation failed: {str(e)}")
+
+@app.get("/api/analytics/anomalies")
+async def detect_spending_anomalies(days: int = 30):
+    """Detect unusual spending patterns"""
+    try:
+        spending_analyzer.expense_db = expense_db
+        analysis = await spending_analyzer.analyze_spending_patterns(days=days)
+        
+        return {
+            "status": "success",
+            "anomalies": analysis["anomalies"],
+            "anomaly_count": len(analysis["anomalies"]),
+            "period_analyzed": days
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Anomaly detection failed: {str(e)}")
+
+@app.get("/api/analytics/ai-performance")
+async def get_ai_performance():
+    """Get AI categorization performance metrics"""
+    try:
+        spending_analyzer.expense_db = expense_db
+        analysis = await spending_analyzer.analyze_spending_patterns(days=90)  # 3 months
+        
+        ai_stats = analysis["ai_stats"]
+        total = ai_stats["total_categorized"]
+        
+        performance = {
+            "total_expenses": total,
+            "ai_categorized": ai_stats["ai_categorized"],
+            "keyword_categorized": ai_stats["keyword_categorized"], 
+            "manual_categorized": ai_stats["manual_categorized"],
+            "ai_percentage": (ai_stats["ai_categorized"] / total * 100) if total > 0 else 0,
+            "average_confidence": ai_stats["average_confidence"],
+            "high_confidence_count": ai_stats.get("high_confidence_count", 0),
+            "efficiency_rating": "excellent" if ai_stats["average_confidence"] > 0.85 else 
+                               "good" if ai_stats["average_confidence"] > 0.7 else "needs_improvement"
+        }
+        
+        return {
+            "status": "success",
+            "performance": performance,
+            "period_analyzed": 90
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI performance analysis failed: {str(e)}")
 
 # Start the application (Railway deployment pattern)
 if __name__ == "__main__":
