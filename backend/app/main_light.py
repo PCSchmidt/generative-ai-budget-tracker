@@ -5,8 +5,6 @@ Uses API-based AI instead of local models to reduce Docker image size
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import os
 from datetime import datetime, date
@@ -19,18 +17,20 @@ try:
     from .expense_db import expense_db
     from .spending_analyzer import spending_analyzer
     from .visualization_api import viz_router, viz_service
+    from .auth import auth_router, auth_models, get_current_user, get_optional_user
 except ImportError:
     # Fall back to absolute imports (for direct execution)
     from ai_categorizer_light import lightweight_categorizer
     from expense_db import expense_db
     from spending_analyzer import spending_analyzer
     from visualization_api import viz_router, viz_service
+    from auth import auth_router, auth_models, get_current_user, get_optional_user
 
 # Create FastAPI application
 app = FastAPI(
-    title="AI Budget Tracker API - Lightweight",
-    description="Smart expense tracking with API-based AI categorization (Railway optimized)",
-    version="3.1.0-light"
+    title="AI Budget Tracker API - Enhanced",
+    description="Smart expense tracking with AI categorization and user authentication",
+    version="4.0.0-auth"
 )
 
 # Configure CORS
@@ -43,7 +43,8 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(viz_router)
+app.include_router(auth_router)  # Authentication routes
+app.include_router(viz_router)   # Visualization routes
 
 # Pydantic models for request/response
 class ExpenseRequest(BaseModel):
@@ -66,8 +67,14 @@ class ExpenseResponse(BaseModel):
 # Database initialization
 @app.on_event("startup")
 async def startup_event():
-    """Initialize database connection on startup"""
+    """Initialize database connection and authentication on startup"""
+    # Initialize expense database
     await expense_db.init_pool()
+    
+    # Initialize authentication models with the same pool
+    auth_models.pool = expense_db.pool
+    if expense_db.pool:
+        await auth_models.create_auth_tables()
     
     # Initialize visualization service with database connections
     viz_service.expense_db = expense_db
@@ -83,8 +90,8 @@ async def root():
     database_status = "connected" if expense_db.pool else "not_connected"
     
     return {
-        "message": "🤖 AI Budget Tracker API - Lightweight Version!",
-        "version": "3.1.0-light",
+        "message": "🤖 AI Budget Tracker API - Enhanced with Authentication!",
+        "version": "4.0.0-auth",
         "status": "healthy",
         "deployment": "railway",
         "timestamp": datetime.now().isoformat(),
@@ -95,7 +102,20 @@ async def root():
             "database_persistence": database_status == "connected",
             "huggingface_configured": bool(os.getenv("HUGGINGFACE_API_KEY")),
             "groq_configured": bool(os.getenv("GROQ_API_KEY")),
-            "deployment_type": "lightweight"
+            "deployment_type": "enhanced"
+        },
+        "authentication": {
+            "enabled": True,
+            "jwt_configured": bool(os.getenv("JWT_SECRET_KEY")),
+            "email_verification": True,
+            "password_reset": True,
+            "endpoints": [
+                "/auth/signup",
+                "/auth/login", 
+                "/auth/refresh",
+                "/auth/logout",
+                "/auth/me"
+            ]
         }
     }
 
@@ -130,8 +150,11 @@ async def categorize_expense_endpoint(request: ExpenseRequest):
         raise HTTPException(status_code=500, detail=f"Categorization failed: {str(e)}")
 
 @app.post("/api/expenses", response_model=ExpenseResponse)
-async def create_expense(expense: ExpenseRequest):
-    """Create a new expense with AI categorization and database storage"""
+async def create_expense(
+    expense: ExpenseRequest,
+    current_user: Dict = Depends(get_current_user)
+):
+    """Create a new expense with AI categorization and user-specific storage"""
     global expense_counter
     
     try:
@@ -159,7 +182,7 @@ async def create_expense(expense: ExpenseRequest):
         else:
             expense_date = date.today()
         
-        # Try database insertion
+        # Try database insertion with user association
         try:
             if expense_db.pool:
                 expense_id = await expense_db.create_expense(
@@ -169,7 +192,8 @@ async def create_expense(expense: ExpenseRequest):
                     category_confidence=confidence,
                     categorization_method=method,
                     expense_date=expense_date,
-                    notes=expense.notes
+                    notes=expense.notes,
+                    user_id=str(current_user["id"])  # Associate with authenticated user
                 )
                 
                 # Retrieve the created expense
@@ -222,11 +246,19 @@ async def create_expense(expense: ExpenseRequest):
         raise HTTPException(status_code=500, detail=f"Failed to create expense: {str(e)}")
 
 @app.get("/api/expenses")
-async def get_expenses(limit: int = 10, offset: int = 0):
-    """Get expenses with pagination"""
+async def get_expenses(
+    limit: int = 10, 
+    offset: int = 0,
+    current_user: Dict = Depends(get_current_user)
+):
+    """Get user-specific expenses with pagination"""
     try:
         if expense_db.pool:
-            expenses = await expense_db.get_expenses(limit=limit, offset=offset)
+            # Get expenses for the authenticated user only
+            expenses = await expense_db.get_expenses(
+                user_id=str(current_user["id"]),
+                limit=limit
+            )
             
             return {
                 "status": "success",
@@ -379,29 +411,6 @@ async def get_insights(days: int = 30):
         "timestamp": datetime.now().isoformat(),
         "source": "fallback_insights"
     }
-
-@app.get("/priority4", response_class=HTMLResponse)
-async def get_priority4_dashboard():
-    """Serve the Priority 4 interactive dashboard"""
-    try:
-        dashboard_path = os.path.join(os.path.dirname(__file__), "priority4_dashboard.html")
-        if os.path.exists(dashboard_path):
-            with open(dashboard_path, 'r', encoding='utf-8') as f:
-                return HTMLResponse(content=f.read())
-        else:
-            return HTMLResponse(content="""
-            <html><body>
-                <h1>Priority 4 Dashboard</h1>
-                <p>Dashboard file not found. API endpoints are available at:</p>
-                <ul>
-                    <li><a href="/docs">API Documentation</a></li>
-                    <li><a href="/expenses">Expenses API</a></li>
-                    <li><a href="/analytics/summary">Analytics Summary</a></li>
-                </ul>
-            </body></html>
-            """)
-    except Exception as e:
-        return HTMLResponse(content=f"<html><body><h1>Error loading dashboard: {str(e)}</h1></body></html>")
 
 if __name__ == "__main__":
     import uvicorn
