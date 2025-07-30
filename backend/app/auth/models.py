@@ -11,6 +11,12 @@ import json
 import logging
 import bcrypt
 
+# Import mock database for fallback
+try:
+    from .mock_db import mock_auth_db
+except ImportError:
+    mock_auth_db = None
+
 logger = logging.getLogger(__name__)
 
 class AuthModels:
@@ -18,9 +24,15 @@ class AuthModels:
     
     def __init__(self, pool=None):
         self.pool = pool
+        self.use_mock = pool is None
+        if self.use_mock:
+            print("⚠️  Using mock database for authentication (no PostgreSQL connection)")
     
     async def create_auth_tables(self):
         """Create authentication-related tables"""
+        if self.use_mock:
+            return await mock_auth_db.create_auth_tables()
+            
         try:
             async with self.pool.acquire() as conn:
                 # Create users table
@@ -82,6 +94,15 @@ class AuthModels:
     
     async def create_user(self, user_data: Dict) -> Optional[Dict]:
         """Create a new user with hashed password"""
+        if self.use_mock:
+            return await mock_auth_db.create_user(
+                email=user_data['email'],
+                username=user_data['username'],
+                password=user_data['password'],
+                first_name=user_data.get('first_name'),
+                last_name=user_data.get('last_name')
+            )
+            
         try:
             async with self.pool.acquire() as conn:
                 # Hash the password
@@ -122,6 +143,9 @@ class AuthModels:
     
     async def get_user_by_email(self, email: str) -> Optional[Dict]:
         """Get user by email address"""
+        if self.use_mock:
+            return await mock_auth_db.get_user_by_email(email)
+            
         try:
             async with self.pool.acquire() as conn:
                 user = await conn.fetchrow('''

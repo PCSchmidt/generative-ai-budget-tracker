@@ -32,4 +32,4 @@ COPY app ./app
 EXPOSE 8000
 
 # Start command for Railway (use shell for proper PORT variable expansion)
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "uvicorn app.main_light:app --host 0.0.0.0 --port ${PORT:-8000}"]
