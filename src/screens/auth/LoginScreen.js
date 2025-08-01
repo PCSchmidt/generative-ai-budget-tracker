@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 
 const LoginScreen = () => {
   const [formData, setFormData] = useState({
@@ -7,6 +8,19 @@ const LoginScreen = () => {
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const { login, isAuthenticated } = useAuth();
+  const navigate = useNavigate();
+
+  // Navigate to dashboard when authentication succeeds
+  useEffect(() => {
+    if (isAuthenticated) {
+      console.log('User authenticated, navigating to dashboard');
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -14,51 +28,118 @@ const LoginScreen = () => {
       ...prev,
       [name]: value
     }));
+    // Clear error when user starts typing
+    if (error) setError('');
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log('Login:', formData);
+    setError('');
+
+    // Basic validation
+    if (!formData.email || !formData.password) {
+      setError('Please fill in all fields');
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      console.log('Attempting login with:', formData.email);
+      const result = await login(formData.email, formData.password);
+      console.log('Login result:', result);
+      
+      // Navigation will happen automatically via useEffect when isAuthenticated changes
+    } catch (error) {
+      console.error('Login error:', error);
+      setError(error.message || 'Login failed. Please check your credentials.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      backgroundColor: '#f8fafc',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '20px'
+      padding: '20px',
+      fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, sans-serif'
     }}>
       <div style={{
-        background: 'rgba(255, 255, 255, 0.95)',
-        backdropFilter: 'blur(10px)',
-        borderRadius: '20px',
-        padding: '40px',
+        backgroundColor: 'white',
+        borderRadius: '12px',
+        padding: '48px',
         width: '100%',
-        maxWidth: '400px',
-        boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)'
+        maxWidth: '440px',
+        boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
+        border: '1px solid #e2e8f0',
+        position: 'relative'
       }}>
-        <h1 style={{
-          fontSize: '28px',
-          fontWeight: '700',
-          color: '#1e293b',
-          margin: '0 0 30px 0',
-          textAlign: 'center'
-        }}>
-          Welcome Back
-        </h1>
+        {/* Back to Home Button */}
+        <Link 
+          to="/" 
+          style={{
+            position: 'absolute',
+            top: '20px',
+            left: '20px',
+            color: '#64748b',
+            textDecoration: 'none',
+            fontSize: '24px',
+            transition: 'color 0.2s ease'
+          }}
+          onMouseEnter={(e) => e.target.style.color = '#3b82f6'}
+          onMouseLeave={(e) => e.target.style.color = '#64748b'}
+        >
+          ← Home
+        </Link>
+
+        <div style={{ textAlign: 'center', marginBottom: '32px' }}>
+          <h1 style={{
+            fontSize: '32px',
+            fontWeight: '700',
+            color: '#0f172a',
+            margin: '0 0 8px 0',
+            letterSpacing: '-0.025em'
+          }}>
+            Welcome Back
+          </h1>
+          <p style={{
+            fontSize: '16px',
+            color: '#64748b',
+            margin: 0
+          }}>
+            Sign in to your account
+          </p>
+          
+          {/* Test credentials for development */}
+          <div style={{
+            backgroundColor: '#fffbeb',
+            border: '1px solid #fde68a',
+            borderRadius: '8px',
+            padding: '12px',
+            marginTop: '16px',
+            fontSize: '14px',
+            color: '#92400e'
+          }}>
+            <strong>Test Credentials:</strong><br />
+            Email: demo@budgettracker.com<br />
+            Password: password123
+          </div>
+        </div>
 
         <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: '20px' }}>
+          <div style={{ marginBottom: '24px' }}>
             <label style={{
               display: 'block',
               fontSize: '14px',
               fontWeight: '600',
               color: '#374151',
-              marginBottom: '6px'
+              marginBottom: '8px'
             }}>
-              Email
+              Email Address
             </label>
             <input
               type="email"
@@ -69,22 +150,27 @@ const LoginScreen = () => {
               style={{
                 width: '100%',
                 padding: '12px 16px',
-                border: '2px solid #e5e7eb',
+                border: '2px solid #e2e8f0',
                 borderRadius: '8px',
                 fontSize: '16px',
-                boxSizing: 'border-box'
+                boxSizing: 'border-box',
+                backgroundColor: '#ffffff',
+                transition: 'border-color 0.2s ease',
+                outline: 'none'
               }}
-              placeholder="Enter your email"
+              placeholder="you@example.com"
+              onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+              onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
             />
           </div>
 
-          <div style={{ marginBottom: '24px' }}>
+          <div style={{ marginBottom: '32px' }}>
             <label style={{
               display: 'block',
               fontSize: '14px',
               fontWeight: '600',
               color: '#374151',
-              marginBottom: '6px'
+              marginBottom: '8px'
             }}>
               Password
             </label>
@@ -98,12 +184,17 @@ const LoginScreen = () => {
                 style={{
                   width: '100%',
                   padding: '12px 50px 12px 16px',
-                  border: '2px solid #e5e7eb',
+                  border: '2px solid #e2e8f0',
                   borderRadius: '8px',
                   fontSize: '16px',
-                  boxSizing: 'border-box'
+                  boxSizing: 'border-box',
+                  backgroundColor: '#ffffff',
+                  transition: 'border-color 0.2s ease',
+                  outline: 'none'
                 }}
                 placeholder="Enter your password"
+                onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
+                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
               />
               <button
                 type="button"
@@ -119,7 +210,8 @@ const LoginScreen = () => {
                   color: '#6b7280',
                   fontSize: '14px',
                   fontWeight: '500',
-                  padding: '4px 8px'
+                  padding: '4px 8px',
+                  borderRadius: '4px'
                 }}
               >
                 {showPassword ? 'Hide' : 'Show'}
@@ -127,31 +219,63 @@ const LoginScreen = () => {
             </div>
           </div>
 
+          {error && (
+            <div style={{
+              backgroundColor: '#fef2f2',
+              border: '1px solid #fca5a5',
+              color: '#dc2626',
+              padding: '14px 16px',
+              borderRadius: '8px',
+              marginBottom: '24px',
+              fontSize: '14px',
+              fontWeight: '500'
+            }}>
+              {error}
+            </div>
+          )}
+
           <button
             type="submit"
+            disabled={isLoading}
             style={{
               width: '100%',
-              background: '#3b82f6',
+              background: isLoading ? '#9ca3af' : '#2563eb',
               color: 'white',
               border: 'none',
-              padding: '14px',
+              padding: '14px 16px',
               borderRadius: '8px',
               fontSize: '16px',
               fontWeight: '600',
-              cursor: 'pointer',
-              marginBottom: '20px'
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+              marginBottom: '24px',
+              transition: 'all 0.2s ease',
+              boxShadow: isLoading ? 'none' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)'
+            }}
+            onMouseOver={(e) => {
+              if (!isLoading) {
+                e.target.style.backgroundColor = '#1d4ed8';
+                e.target.style.transform = 'translateY(-1px)';
+                e.target.style.boxShadow = '0 4px 12px 0 rgba(37, 99, 235, 0.3)';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (!isLoading) {
+                e.target.style.backgroundColor = '#2563eb';
+                e.target.style.transform = 'translateY(0)';
+                e.target.style.boxShadow = '0 1px 2px 0 rgba(0, 0, 0, 0.05)';
+              }
             }}
           >
-            Sign In
+            {isLoading ? 'Signing In...' : 'Sign In'}
           </button>
 
           <div style={{ textAlign: 'center' }}>
-            <span style={{ color: '#6b7280', fontSize: '14px' }}>
+            <span style={{ color: '#64748b', fontSize: '14px' }}>
               Don't have an account?{' '}
               <Link
                 to="/signup"
                 style={{
-                  color: '#3b82f6',
+                  color: '#2563eb',
                   textDecoration: 'none',
                   fontWeight: '600'
                 }}

@@ -3,16 +3,53 @@
  * Handles all backend communication with authentication
  */
 
+import MockApiService from './mockApi';
+
 // API Configuration
 const API_BASE_URL = process.env.NODE_ENV === 'development' 
   ? 'http://localhost:8000'  // Local development
-  : 'https://your-railway-domain.railway.app'; // Production
+  : 'https://generative-ai-budget-tracker-production.up.railway.app'; // Railway production
 
 class ApiService {
   constructor() {
     this.baseURL = API_BASE_URL;
     this.accessToken = null;
     this.refreshToken = null;
+    this.mockService = new MockApiService();
+    this.useMockService = false;
+    this.backendChecked = false;
+  }
+
+  // Check if backend is available
+  async checkBackendAvailability() {
+    if (this.backendChecked) return !this.useMockService;
+    
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
+      
+      const response = await fetch(`${this.baseURL}/health`, {
+        method: 'GET',
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      this.useMockService = !response.ok;
+      this.backendChecked = true;
+      
+      if (this.useMockService) {
+        console.log('🚧 Backend not available, using mock service for development');
+      } else {
+        console.log('✅ Backend is available');
+      }
+      
+      return !this.useMockService;
+    } catch (error) {
+      console.log('🚧 Backend not available, using mock service for development');
+      this.useMockService = true;
+      this.backendChecked = true;
+      return false;
+    }
   }
 
   // Initialize tokens from storage
@@ -105,6 +142,12 @@ class ApiService {
 
   // Authentication endpoints
   async signup(userData) {
+    await this.checkBackendAvailability();
+    
+    if (this.useMockService) {
+      return await this.mockService.signup(userData);
+    }
+
     try {
       const response = await this.request('/auth/signup', {
         method: 'POST',
@@ -128,6 +171,11 @@ class ApiService {
   }
 
   async login(email, password) {
+    await this.checkBackendAvailability();
+    
+    if (this.useMockService) {
+      return await this.mockService.login(email, password);
+    }
     try {
       const response = await this.request('/auth/login', {
         method: 'POST',
@@ -151,6 +199,12 @@ class ApiService {
   }
 
   async logout() {
+    if (this.useMockService) {
+      await this.mockService.logout();
+      await this.clearTokens();
+      return { message: 'Logged out successfully' };
+    }
+
     try {
       // Call logout endpoint if we have a refresh token
       if (this.refreshToken) {
@@ -217,46 +271,128 @@ class ApiService {
     }
   }
 
-  // Expense endpoints (ready for future implementation)
+  // Expense endpoints
   async getExpenses(params = {}) {
+    await this.checkBackendAvailability();
+    
+    if (this.useMockService) {
+      return await this.mockService.getExpenses();
+    }
+
     try {
       const queryString = new URLSearchParams(params).toString();
-      const response = await this.request(`/expenses?${queryString}`);
-      const data = await response.json();
-
+      const endpoint = queryString ? `/api/expenses?${queryString}` : '/api/expenses';
+      const response = await this.request(endpoint);
+      
       if (!response.ok) {
-        throw new Error(data.detail || 'Failed to get expenses');
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to get expenses');
       }
-
-      return { success: true, expenses: data };
+      
+      const data = await response.json();
+      return data; // Return data directly for compatibility
     } catch (error) {
-      return {
-        success: false,
-        error: error.message || 'Failed to get expenses',
-      };
+      console.error('Get expenses error:', error);
+      throw error;
     }
   }
 
   async createExpense(expenseData) {
+    await this.checkBackendAvailability();
+    
+    if (this.useMockService) {
+      return await this.mockService.createExpense(expenseData);
+    }
+
     try {
-      const response = await this.request('/expenses', {
+      const response = await this.request('/api/expenses', {
         method: 'POST',
         body: JSON.stringify(expenseData),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.detail || 'Failed to create expense');
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to create expense');
       }
 
-      return { success: true, expense: data };
+      const data = await response.json();
+      return data; // Return data directly for compatibility
     } catch (error) {
-      return {
-        success: false,
-        error: error.message || 'Failed to create expense',
-      };
+      console.error('Create expense error:', error);
+      throw error;
     }
+  }
+
+  async updateExpense(expenseId, expenseData) {
+    await this.checkBackendAvailability();
+    
+    if (this.useMockService) {
+      return await this.mockService.updateExpense(expenseId, expenseData);
+    }
+
+    try {
+      const response = await this.request(`/api/expenses/${expenseId}`, {
+        method: 'PUT',
+        body: JSON.stringify(expenseData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to update expense');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Update expense error:', error);
+      throw error;
+    }
+  }
+
+  async deleteExpense(expenseId) {
+    await this.checkBackendAvailability();
+    
+    if (this.useMockService) {
+      return await this.mockService.deleteExpense(expenseId);
+    }
+
+    try {
+      const response = await this.request(`/api/expenses/${expenseId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to delete expense');
+      }
+
+      return { success: true };
+    } catch (error) {
+      console.error('Delete expense error:', error);
+      throw error;
+    }
+  }
+
+  // Generic method for all API calls
+  async get(endpoint) {
+    const response = await this.request(endpoint);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || `Failed to fetch ${endpoint}`);
+    }
+    return await response.json();
+  }
+
+  async post(endpoint, data) {
+    const response = await this.request(endpoint, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || `Failed to post to ${endpoint}`);
+    }
+    return await response.json();
   }
 
   // AI Insights endpoints (ready for future implementation)
@@ -299,4 +435,10 @@ class ApiService {
 }
 
 // Export singleton instance
-export default new ApiService();
+const apiService = new ApiService();
+
+// Initialize tokens on module load
+apiService.initializeTokens();
+
+export { apiService };
+export default apiService;

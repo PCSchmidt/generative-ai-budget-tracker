@@ -114,6 +114,7 @@ export const AuthProvider = ({ children }) => {
 
   const initializeAuth = async () => {
     try {
+      console.log('AuthContext: Initializing authentication...');
       dispatch({ type: AUTH_ACTIONS.LOADING });
 
       // Check if user data exists in localStorage
@@ -121,10 +122,17 @@ export const AuthProvider = ({ children }) => {
       const accessToken = localStorage.getItem('accessToken');
       const refreshToken = localStorage.getItem('refreshToken');
 
+      console.log('AuthContext: Checking stored auth data:', {
+        hasUser: !!userString,
+        hasAccessToken: !!accessToken,
+        hasRefreshToken: !!refreshToken
+      });
+
       // Only treat as authenticated if ALL required data exists
       if (userString && accessToken && refreshToken) {
         try {
           const user = JSON.parse(userString);
+          console.log('AuthContext: Found valid stored auth data, restoring session for user:', user.email);
           
           // Initialize API service with the tokens
           await ApiService.storeTokens(accessToken, refreshToken);
@@ -137,6 +145,7 @@ export const AuthProvider = ({ children }) => {
               refreshToken,
             },
           });
+          console.log('AuthContext: Session restored successfully');
           return;
         } catch (parseError) {
           console.error('Failed to parse stored user data:', parseError);
@@ -148,6 +157,7 @@ export const AuthProvider = ({ children }) => {
       }
 
       // No valid auth state found - user is not authenticated
+      console.log('AuthContext: No valid stored auth data, user not authenticated');
       dispatch({ type: AUTH_ACTIONS.LOGOUT });
     } catch (error) {
       console.error('Auth initialization failed:', error);
@@ -158,9 +168,11 @@ export const AuthProvider = ({ children }) => {
   // Login function
   const login = async (email, password) => {
     try {
+      console.log('AuthContext: Starting login process');
       dispatch({ type: AUTH_ACTIONS.LOADING });
 
       const result = await ApiService.login(email, password);
+      console.log('AuthContext: API login result:', result);
 
       // Store user data and tokens in localStorage
       localStorage.setItem('user', JSON.stringify(result.user));
@@ -179,9 +191,10 @@ export const AuthProvider = ({ children }) => {
         },
       });
 
+      console.log('AuthContext: Login successful, user authenticated');
       return { success: true };
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('AuthContext: Login error:', error);
       dispatch({
         type: AUTH_ACTIONS.LOGIN_FAILURE,
         payload: { error: error.message || 'Login failed. Please try again.' },
