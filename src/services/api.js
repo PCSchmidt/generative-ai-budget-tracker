@@ -16,12 +16,57 @@ class ApiService {
     this.accessToken = null;
     this.refreshToken = null;
     this.mockService = new MockApiService();
-    this.useMockService = false;
+    this.useMockService = false; // Force use of real backend for development
     this.backendChecked = false;
+    
+    // For development: force backend usage
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔧 Development mode: Forcing backend connection to', this.baseURL);
+      this.useMockService = false;
+      this.backendChecked = true;
+    }
   }
 
   // Check if backend is available
   async checkBackendAvailability() {
+    // In development, always try the backend first
+    if (process.env.NODE_ENV === 'development') {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for dev
+        
+        console.log('🔍 Checking backend availability at:', `${this.baseURL}/health`);
+        
+        const response = await fetch(`${this.baseURL}/health`, {
+          method: 'GET',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+        
+        clearTimeout(timeoutId);
+        
+        if (response.ok) {
+          this.useMockService = false;
+          this.backendChecked = true;
+          console.log('✅ Backend is available and responding');
+          return true;
+        } else {
+          console.warn('⚠️ Backend responded but with error status:', response.status);
+          this.useMockService = true;
+          this.backendChecked = true;
+          return false;
+        }
+      } catch (error) {
+        console.error('❌ Backend connection failed:', error.message);
+        this.useMockService = true;
+        this.backendChecked = true;
+        return false;
+      }
+    }
+    
+    // Original logic for production
     if (this.backendChecked) return !this.useMockService;
     
     try {
