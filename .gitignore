@@ -126,7 +126,7 @@ railway.json
 vercel.json
 
 # AI and analytics temp files
-ai_categorizer.py
-analytics_engine.py
+# ai_categorizer.py (Removed - this is our core AI service)
+# analytics_engine.py (Removed - needed for Phase 3)
 setup_database.py
 validate_system.py

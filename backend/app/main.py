@@ -14,7 +14,27 @@ import bcrypt
 import os
 import re
 from pathlib import Path
-from app.ai_categorizer import categorize_expense_ai, categorize_expense_rules
+import sys
+import os
+
+# Add the current directory to Python path for imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
+
+try:
+    from ai_categorizer import categorize_expense_ai, categorize_expense_rules
+    AI_AVAILABLE = True
+    print("✅ AI categorization loaded successfully")
+except ImportError as e:
+    print(f"⚠️  AI categorization not available: {e}")
+    AI_AVAILABLE = False
+    
+    # Fallback functions if AI not available
+    async def categorize_expense_ai(description: str, amount: float = None) -> str:
+        return "Other"
+    
+    def categorize_expense_rules(description: str) -> str:
+        return "Other"
 
 # Create FastAPI app
 app = FastAPI(
