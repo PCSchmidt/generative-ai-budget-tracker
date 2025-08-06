@@ -30,6 +30,33 @@ build/
 *.tmp
 *.temp
 
+# Experimental/Development variants
+*-light.py
+*-minimal.py
+*-simple.py
+*-light.txt
+*-minimal.txt
+*-simple.txt
+*-light.yml
+*-minimal.yml
+Dockerfile.light
+docker-compose-minimal.yml
+main-minimal.py
+main_light.py
+test_*.py
+start-*.sh
+start-*.bat
+test-edit.txt
+DEPLOYMENT_READY.md
+
+# Duplicate frontend directories (consolidated to /frontend/)
+src/
+web-frontend/
+
+# Development HTML files
+dashboard*.html
+dashboard-*.html
+
 # Python
 __pycache__/
 *.py[cod]
