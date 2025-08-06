@@ -121,6 +121,33 @@ priority*.html
 *GUIDE*
 *ENHANCEMENTS*
 
+# Experimental and duplicate files
+*_light.py
+*_minimal.py
+*-light.txt
+*-minimal.txt
+*-simple.txt
+docker-compose-minimal.yml
+Dockerfile.light
+**/Dockerfile.light
+DEPLOYMENT_READY.md
+dashboard_v*.html
+mobile-dashboard.html
+
+# Duplicate frontend directories (we use /frontend/)
+web-frontend/
+src/navigation/
+src/screens/main/
+src/screens/dashboard/DashboardScreenClean.js
+
+# Development scripts and test files
+start-*.sh
+start-*.bat
+test-edit.txt
+main.py
+App.js
+pyproject.toml
+
 # Railway and deployment
 railway.json
 vercel.json
