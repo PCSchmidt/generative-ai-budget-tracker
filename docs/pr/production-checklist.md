@@ -15,47 +15,60 @@ Changes
 - backend/app/main.py (context)
   - Auth endpoints, AI endpoints, and CORS are ready for production; verified locally via DevTools.
 
-Environment & Config (Production)
-- Railway (backend)
-  - SECRET_KEY: strong, random value
-  - JWT_ALGORITHM: HS256 (default in app)
-  - DATABASE_URL: postgres connection
-  - HUGGINGFACE_API_KEY, GROQ_API_KEY (optional for advanced AI)
-  - CORS allow_origins: include your Vercel domain(s)
-- Vercel (frontend)
-  - NODE_ENV=production (default)
-  - API base URL is auto-switched in src/services/api.js (Railway in production)
+Production Checklist
+Backend (Railway)
+- [ ] SECRET_KEY set to a strong random value (not default)
+- [ ] DATABASE_URL points to production Postgres and is reachable
+- [ ] CORS allow_origins includes Vercel domains (https://<your-app>.vercel.app)
+- [ ] Optional AI keys configured: HUGGINGFACE_API_KEY, GROQ_API_KEY
+- [ ] /health returns { status: "healthy" }
+
+Frontend (Vercel)
+- [ ] Production build uses Railway API base URL (handled in src/services/api.js)
+- [ ] Environment variables configured if needed
+- [ ] Deployment succeeds; site loads over HTTPS
+
+Security
+- [ ] JWT algorithm HS256 confirmed; SECRET_KEY rotation policy documented
+- [ ] CORS restricted to exact domains; no wildcards in production
+- [ ] No secrets committed; .env files excluded
+
+Observability
+- [ ] Enable platform logs/metrics (Railway + Vercel)
+- [ ] Capture 4xx/5xx rates and add alerting (optional)
+
+QA Validation (Post-Deploy)
+- [ ] Login from Vercel UI triggers POST https://<railway-domain>/auth/login → 200
+- [ ] Local Storage contains accessToken and user
+- [ ] GET /api/expenses → 200 with Authorization header
+- [ ] POST /api/ai/financial-advice → 200 with expected fields (main_advice, action_items, confidence)
+- [ ] GET /api/ai/spending-insights → 200 with category_breakdown
+- [ ] No CORS or mixed-content errors in Console
 
 Test Plan (Local)
-- Go to http://localhost:3000/login
-- DevTools → Network → Fetch/XHR → Sign in with demo@budgettracker.com / password123
-  - Expect POST http://localhost:8000/auth/login → 200 with { access_token, user }
-  - Local Storage contains accessToken and user
-- Visit /dashboard
-  - Cards render without errors
-  - DevTools shows GET /api/expenses, POST /api/ai/financial-advice, GET /api/ai/spending-insights
-  - Advice panel shows main_advice string and bullet action_items
+- Visit http://localhost:3000/login and sign in with demo@budgettracker.com / password123
+- Verify POST http://localhost:8000/auth/login → 200 with { access_token, user }
+- Navigate to /dashboard; verify expenses and AI panels render without runtime errors
 
-Production Validation (Post-Deploy)
-- Vercel app login hits Railway /auth/login and returns 200
-- Protected GET /api/expenses returns 200 with Authorization header
-- Dashboard shows advice and insights without runtime errors
-- No CORS errors in Console
+Environment & Config (Production)
+- Railway
+  - SECRET_KEY
+  - DATABASE_URL
+  - Optional: HUGGINGFACE_API_KEY, GROQ_API_KEY
+  - CORS allow_origins include Vercel domains
+- Vercel
+  - NODE_ENV=production
+  - Uses production API base URL (src/services/api.js logic)
 
 Rollback Plan
-- Revert this branch if auth or dashboard regressions occur
-- Re-deploy previous stable frontend and backend
-
-Security & Hardening
-- Ensure SECRET_KEY is not default
-- Limit allow_origins to exact Vercel domains
-- Monitor 401s and add auto-logout on unauthorized in a follow-up PR
+- Revert this commit and redeploy previous stable frontend/backend
+- If auth/API fails, temporarily disable protected routes for public landing only
 
 Known Follow-ups
-- Centralized 401 handler/toast in api.js
-- Remove verbose console logs
-- Charts for insights, more AI categories
+- Centralized 401 auto-logout/toast in src/services/api.js
+- Remove debug logs
+- Add charts and richer AI categorization UI
 
-Screenshots
-- Local DevTools verified: POST /auth/login 200 with token and user
+Screenshots/Proof
+- DevTools Network: POST /auth/login 200; AI endpoints return 200 with expected JSON
 
