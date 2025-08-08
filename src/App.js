@@ -13,6 +13,7 @@ import LandingPage from './screens/LandingPage';
 import LoginScreen from './screens/auth/LoginScreen';
 import SignupScreen from './screens/auth/SignupScreen';
 import DashboardScreen from './screens/dashboard/DashboardScreen';
+import AIDashboardScreen from './screens/main/DashboardScreen';
 
 // Import global styles
 import './styles/GlobalStyles.css';
@@ -34,6 +35,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <DashboardScreen />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/ai-dashboard" 
+              element={
+                <ProtectedRoute>
+                  <AIDashboardScreen />
                 </ProtectedRoute>
               } 
             />

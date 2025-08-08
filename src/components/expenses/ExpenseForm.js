@@ -11,7 +11,6 @@ const ExpenseForm = ({ onExpenseCreated, onCancel, editingExpense = null }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
   const [formData, setFormData] = useState({
     description: editingExpense?.description || '',
     amount: editingExpense?.amount || '',
@@ -19,6 +18,11 @@ const ExpenseForm = ({ onExpenseCreated, onCancel, editingExpense = null }) => {
     notes: editingExpense?.notes || '',
     expense_date: editingExpense?.expense_date || new Date().toISOString().split('T')[0]
   });
+
+  // NEW: AI suggestion state
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState('');
+  const [aiSuggestion, setAiSuggestion] = useState(null); // { category, confidence, method, reasoning }
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -42,9 +46,10 @@ const ExpenseForm = ({ onExpenseCreated, onCancel, editingExpense = null }) => {
         expense_date: formData.expense_date
       };
 
-      const response = await apiService.post('/api/expenses', expenseData);
+      // Use AI-assisted creation to auto-categorize when category is empty
+      const response = await apiService.createExpenseWithAI(expenseData);
       
-      if (response.success !== false) {
+      if (response && response.id) {
         // Reset form
         setFormData({
           description: '',
@@ -53,12 +58,16 @@ const ExpenseForm = ({ onExpenseCreated, onCancel, editingExpense = null }) => {
           notes: '',
           expense_date: new Date().toISOString().split('T')[0]
         });
+        setAiSuggestion(null);
         
         if (onExpenseCreated) {
           onExpenseCreated(response);
         }
+      } else if (response?.success === false) {
+        setError(response.error || response.message || 'Failed to create expense');
       } else {
-        setError(response.message || 'Failed to create expense');
+        // Backward compatibility with previous API
+        if (onExpenseCreated) onExpenseCreated(response);
       }
     } catch (error) {
       console.error('Error creating expense:', error);
@@ -74,6 +83,60 @@ const ExpenseForm = ({ onExpenseCreated, onCancel, editingExpense = null }) => {
       ...prev,
       [name]: value
     }));
+  };
+
+  // NEW: Trigger AI suggestion
+  const handleAISuggest = async () => {
+    setAiError('');
+    setAiLoading(true);
+    setAiSuggestion(null);
+    try {
+      const desc = formData.description?.trim();
+      const amt = formData.amount ? parseFloat(formData.amount) : null;
+      if (!desc || desc.length < 3) {
+        setAiError('Enter a description first');
+        return;
+      }
+
+      // Try protected smart endpoint first (uses auth when available)
+      let result;
+      try {
+        result = await apiService.categorizeExpenseSmart(desc, isNaN(amt) ? null : amt);
+      } catch (smartErr) {
+        result = { success: false, error: smartErr?.message };
+      }
+
+      if (result?.success && result.categorization) {
+        const { category, confidence, method, reasoning } = result.categorization;
+        setAiSuggestion({ category, confidence, method, reasoning });
+      } else {
+        // Fallback to public categorization (no auth required)
+        const fallback = await apiService.categorizeExpense(desc, isNaN(amt) ? null : amt);
+        if (fallback?.success) {
+          setAiSuggestion({
+            category: fallback.category,
+            confidence: fallback.confidence,
+            method: fallback.method || 'public_ai',
+            reasoning: 'Public AI categorization fallback'
+          });
+          if (result?.error) setAiError(result.error);
+        } else {
+          setAiError(result?.error || fallback?.error || 'AI could not provide a suggestion');
+        }
+      }
+    } catch (err) {
+      console.warn('AI suggestion failed:', err);
+      setAiError(err.message || 'AI suggestion failed');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  // NEW: Accept AI suggestion into category field
+  const acceptAISuggestion = () => {
+    if (aiSuggestion?.category) {
+      setFormData(prev => ({ ...prev, category: aiSuggestion.category }));
+    }
   };
 
   const formStyle = {
@@ -114,11 +177,6 @@ const ExpenseForm = ({ onExpenseCreated, onCancel, editingExpense = null }) => {
     backgroundColor: 'white',
     transition: 'border-color 0.2s ease',
     outline: 'none'
-  };
-
-  const inputFocusStyle = {
-    borderColor: 'var(--accent-500)',
-    boxShadow: '0 0 0 3px rgba(59, 130, 246, 0.1)'
   };
 
   const textareaStyle = {
@@ -170,6 +228,41 @@ const ExpenseForm = ({ onExpenseCreated, onCancel, editingExpense = null }) => {
     fontSize: '0.875rem',
     marginBottom: 'var(--spacing-md)',
     border: '1px solid #fecaca'
+  };
+
+  // NEW: Styles for AI suggestion card
+  const aiCardStyle = {
+    padding: 'var(--spacing-md)',
+    border: '1px solid var(--gray-200)',
+    borderRadius: 'var(--border-radius-md)',
+    backgroundColor: 'white',
+    marginTop: 'var(--spacing-sm)'
+  };
+  const aiRowStyle = { display: 'flex', alignItems: 'center', justifyContent: 'space-between' };
+  const aiBadgeStyle = {
+    fontSize: '0.8rem',
+    color: '#065f46',
+    backgroundColor: '#ecfdf5',
+    border: '1px solid #a7f3d0',
+    borderRadius: '999px',
+    padding: '2px 8px'
+  };
+  const aiAcceptBtnStyle = {
+    padding: '6px 10px',
+    backgroundColor: '#2563eb',
+    color: 'white',
+    border: 'none',
+    borderRadius: '6px',
+    cursor: 'pointer'
+  };
+  const aiSuggestBtnStyle = {
+    marginTop: '6px',
+    padding: '8px 10px',
+    backgroundColor: '#f3f4f6',
+    color: '#111827',
+    border: '1px solid #e5e7eb',
+    borderRadius: '6px',
+    cursor: aiLoading ? 'not-allowed' : 'pointer'
   };
 
   return (
@@ -231,6 +324,34 @@ const ExpenseForm = ({ onExpenseCreated, onCancel, editingExpense = null }) => {
           onChange={handleChange}
           style={inputStyle}
         />
+        {/* AI Suggestion UI */}
+        {aiSuggestion && (
+          <div style={aiCardStyle}>
+            <div style={aiRowStyle}>
+              <div>
+                <div style={{ fontWeight: 600, color: '#111827' }}>AI Suggestion: {aiSuggestion.category}</div>
+                <div style={{ fontSize: '0.85rem', color: '#4b5563' }}>
+                  Confidence: {typeof aiSuggestion.confidence === 'number' ? `${Math.round(aiSuggestion.confidence * 100)}%` : '—'}
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <span style={aiBadgeStyle}>{aiSuggestion.method || 'ai'}</span>
+                </div>
+              </div>
+              <button type="button" onClick={acceptAISuggestion} style={aiAcceptBtnStyle}>Use</button>
+            </div>
+            {aiSuggestion.reasoning && (
+              <div style={{ marginTop: 6, fontSize: '0.85rem', color: '#374151' }}>
+                Why: {aiSuggestion.reasoning}
+              </div>
+            )}
+          </div>
+        )}
+        {aiError && (
+          <div style={{ ...errorStyle, marginTop: '8px' }}>{aiError}</div>
+        )}
+        <button type="button" onClick={handleAISuggest} style={aiSuggestBtnStyle} disabled={aiLoading}>
+          {aiLoading ? 'Getting AI suggestion...' : 'Suggest with AI'}
+        </button>
       </div>
 
       <div style={inputGroupStyle}>

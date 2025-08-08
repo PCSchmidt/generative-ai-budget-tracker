@@ -286,6 +286,45 @@ class MockApiService {
       last_updated: new Date().toISOString()
     };
   }
+
+  // Mock expense categorization
+  categorizeExpense(description) {
+    const desc = description.toLowerCase();
+    
+    if (desc.includes('coffee') || desc.includes('starbucks') || desc.includes('restaurant') || 
+        desc.includes('food') || desc.includes('dining') || desc.includes('lunch') || 
+        desc.includes('dinner') || desc.includes('breakfast')) {
+      return 'Food & Dining';
+    }
+    
+    if (desc.includes('uber') || desc.includes('lyft') || desc.includes('taxi') || 
+        desc.includes('gas') || desc.includes('fuel') || desc.includes('bus') || 
+        desc.includes('train') || desc.includes('parking')) {
+      return 'Transportation';
+    }
+    
+    if (desc.includes('netflix') || desc.includes('spotify') || desc.includes('movie') || 
+        desc.includes('entertainment') || desc.includes('game') || desc.includes('concert')) {
+      return 'Entertainment';
+    }
+    
+    if (desc.includes('amazon') || desc.includes('store') || desc.includes('shopping') || 
+        desc.includes('clothes') || desc.includes('electronics')) {
+      return 'Shopping';
+    }
+    
+    if (desc.includes('gym') || desc.includes('fitness') || desc.includes('health') || 
+        desc.includes('doctor') || desc.includes('pharmacy')) {
+      return 'Health & Fitness';
+    }
+    
+    if (desc.includes('electric') || desc.includes('water') || desc.includes('internet') || 
+        desc.includes('phone') || desc.includes('bill')) {
+      return 'Utilities & Bills';
+    }
+    
+    return 'Miscellaneous';
+  }
 }
 
 export default MockApiService;

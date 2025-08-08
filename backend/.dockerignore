@@ -1,0 +1,45 @@
+# Dockerfile.light for Railway deployment exclusions
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.hypothesis
+
+# Heavy AI models and data
+models/
+*.pkl
+*.model
+*.bin
+*.safetensors
+
+# Development files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+requirements.txt
+requirements-minimal.txt
+Dockerfile.light
+
+# Documentation
+README.md
+docs/
+*.md

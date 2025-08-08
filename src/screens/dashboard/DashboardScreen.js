@@ -5,10 +5,12 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import apiService from '../../services/api';
 
 export default function DashboardScreen() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [expenses, setExpenses] = useState([]);
   const [insights, setInsights] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -21,6 +23,13 @@ export default function DashboardScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [deletingExpense, setDeletingExpense] = useState(null);
 
+  // ======= NEW ML STATES =======
+  const [financialAdvice, setFinancialAdvice] = useState(null);
+  const [spendingInsights, setSpendingInsights] = useState(null);
+  const [aiSystemStatus, setAiSystemStatus] = useState(null);
+  const [loadingMLData, setLoadingMLData] = useState(false);
+  const [showAIInsights, setShowAIInsights] = useState(false);
+
   // Debug: Log auth state
   console.log('DashboardScreen - user:', user);
   console.log('DashboardScreen - localStorage tokens:', {
@@ -31,6 +40,7 @@ export default function DashboardScreen() {
 
   useEffect(() => {
     loadDashboardData();
+    loadAISystemStatus();
   }, []);
 
   const loadDashboardData = async () => {
@@ -44,14 +54,65 @@ export default function DashboardScreen() {
         apiService.getInsights().catch(() => ({ insights: null }))
       ]);
 
-      setExpenses(expensesData.expenses || []);
+      setExpenses(expensesData.expenses || expensesData || []);
       setInsights(insightsData.insights);
+      
+      // Load ML insights if we have expenses
+      if ((expensesData.expenses || expensesData || []).length > 0) {
+        loadMLInsights();
+      }
       
     } catch (error) {
       console.error('Dashboard load error:', error);
       setError('Unable to load dashboard data');
     } finally {
       setLoading(false);
+    }
+  };
+
+  // ======= NEW ML DATA LOADING METHODS =======
+  const loadAISystemStatus = async () => {
+    try {
+      const status = await apiService.getAISystemStatus();
+      setAiSystemStatus(status);
+      console.log('AI System Status:', status);
+    } catch (error) {
+      console.warn('Could not load AI system status:', error);
+    }
+  };
+
+  const loadMLInsights = async () => {
+    if (loadingMLData) return; // Prevent multiple simultaneous calls
+    
+    try {
+      setLoadingMLData(true);
+      
+      const [adviceResult, insightsResult] = await Promise.all([
+        apiService.getFinancialAdvice('general', true).catch(err => {
+          console.warn('Financial advice failed:', err);
+          return { success: false, error: err.message };
+        }),
+        apiService.getSpendingInsights().catch(err => {
+          console.warn('Spending insights failed:', err);
+          return { success: false, error: err.message };
+        })
+      ]);
+
+      if (adviceResult && adviceResult.success) {
+        // Store only the advice payload, not the wrapper object
+        setFinancialAdvice(adviceResult.advice);
+        console.log('Financial advice loaded:', adviceResult.advice);
+      }
+
+      if (insightsResult && insightsResult.success) {
+        setSpendingInsights(insightsResult);
+        console.log('Spending insights loaded:', insightsResult);
+      }
+
+    } catch (error) {
+      console.error('ML insights loading error:', error);
+    } finally {
+      setLoadingMLData(false);
     }
   };
 
@@ -66,12 +127,13 @@ export default function DashboardScreen() {
   const handleAddExpense = async (expenseData) => {
     try {
       setAddingExpense(true);
-      console.log('Adding expense:', expenseData);
+      console.log('Adding expense with AI categorization:', expenseData);
       
-      const response = await apiService.createExpense(expenseData);
-      console.log('Expense created:', response);
+      // Use AI-enhanced expense creation
+      const response = await apiService.createExpenseWithAI(expenseData);
+      console.log('Expense created with AI:', response);
       
-      // Reload dashboard data
+      // Reload dashboard data and ML insights
       await loadDashboardData();
       setShowAddExpense(false);
     } catch (error) {
@@ -190,15 +252,24 @@ export default function DashboardScreen() {
             <h1 style={styles.title}>💰 AI Budget Tracker</h1>
             <p style={styles.subtitle}>Welcome back, {user?.username || 'User'}!</p>
           </div>
-          <button style={styles.logoutButton} onClick={handleLogout}>
-            Logout
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              style={{ ...styles.logoutButton, backgroundColor: '#2563eb' }}
+              onClick={() => navigate('/ai-dashboard')}
+              title="Open AI Dashboard"
+            >
+              AI Dashboard
+            </button>
+            <button style={styles.logoutButton} onClick={handleLogout}>
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main style={styles.main}>
-        {/* Summary Cards */}
+        {/* Summary Cards with ML Insights */}
         <section style={styles.summarySection}>
           <div style={styles.summaryCard}>
             <h3 style={styles.cardTitle}>Total Expenses</h3>
@@ -209,21 +280,91 @@ export default function DashboardScreen() {
           </div>
 
           <div style={styles.summaryCard}>
-            <h3 style={styles.cardTitle}>This Month</h3>
+            <h3 style={styles.cardTitle}>AI Analysis</h3>
             <p style={styles.cardAmount}>
-              {formatCurrency(expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0))}
+              {spendingInsights?.insights?.category_breakdown ? 
+                Object.keys(spendingInsights.insights.category_breakdown).length + ' categories' :
+                'Analyzing...'
+              }
             </p>
-            <p style={styles.cardSubtext}>Current month</p>
+            <p style={styles.cardSubtext}>
+              {aiSystemStatus?.ml_enhanced ? '🤖 AI Enhanced' : '📊 Basic Analysis'}
+            </p>
           </div>
 
           <div style={styles.summaryCard}>
-            <h3 style={styles.cardTitle}>AI Insights</h3>
+            <h3 style={styles.cardTitle}>Smart Insights</h3>
             <p style={styles.cardAmount}>
-              {insights?.top_category || 'Analyzing...'}
+              {spendingInsights?.insights?.recommendations?.length || 0}
             </p>
-            <p style={styles.cardSubtext}>Top category</p>
+            <p style={styles.cardSubtext}>AI recommendations</p>
+            {loadingMLData && (
+              <div style={styles.miniSpinner}></div>
+            )}
           </div>
         </section>
+
+        {/* AI Financial Advisor Section */}
+        {(financialAdvice || spendingInsights) && (
+          <section style={styles.aiInsightsSection}>
+            <h2 style={styles.sectionTitle}>
+              🤖 AI Financial Advisor
+              {loadingMLData && <span style={styles.loadingDot}>●</span>}
+            </h2>
+            
+            {financialAdvice && (
+              <div style={styles.adviceCard}>
+                <h3 style={styles.adviceTitle}>💡 Personalized Advice</h3>
+                <p style={styles.adviceText}>{financialAdvice.main_advice}</p>
+                {Array.isArray(financialAdvice.action_items) && financialAdvice.action_items.length > 0 && (
+                  <ul style={styles.recommendationList}>
+                    {financialAdvice.action_items.slice(0, 3).map((item, idx) => (
+                      <li key={idx} style={styles.recommendationItem}>{item}</li>
+                    ))}
+                  </ul>
+                )}
+                <div style={styles.adviceMeta}>
+                  <span>Confidence: {Math.round(((financialAdvice.confidence ?? 0.7)) * 100)}%</span>
+                  <span>•</span>
+                  <span>{financialAdvice.advice_type || 'General'}</span>
+                </div>
+              </div>
+            )}
+
+            {spendingInsights?.insights && (
+              <div style={styles.insightsGrid}>
+                {spendingInsights.insights.category_breakdown && (
+                  <div style={styles.insightCard}>
+                    <h4 style={styles.insightTitle}>📊 Category Breakdown</h4>
+                    <div style={styles.categoryList}>
+                      {Object.entries(spendingInsights.insights.category_breakdown)
+                        .slice(0, 3)
+                        .map(([category, amount]) => (
+                          <div key={category} style={styles.categoryItem}>
+                            <span>{category}</span>
+                            <span>{formatCurrency(amount)}</span>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
+
+                {spendingInsights.insights.recommendations && spendingInsights.insights.recommendations.length > 0 && (
+                  <div style={styles.insightCard}>
+                    <h4 style={styles.insightTitle}>🎯 Smart Recommendations</h4>
+                    <ul style={styles.recommendationList}>
+                      {spendingInsights.insights.recommendations.slice(0, 3).map((rec, index) => (
+                        <li key={index} style={styles.recommendationItem}>
+                          {rec}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Quick Actions */}
         <section style={styles.actionsSection}>
@@ -240,9 +381,13 @@ export default function DashboardScreen() {
               <span style={styles.actionIcon}>📊</span>
               View Reports
             </button>
-            <button style={styles.actionButton}>
+            <button 
+              style={styles.actionButton}
+              onClick={loadMLInsights}
+              disabled={loadingMLData}
+            >
               <span style={styles.actionIcon}>🤖</span>
-              AI Insights
+              {loadingMLData ? 'Analyzing...' : 'AI Insights'}
             </button>
             <button style={styles.actionButton}>
               <span style={styles.actionIcon}>⚙️</span>
@@ -398,6 +543,37 @@ function ExpenseFormModal({ onSubmit, onCancel, loading, initialData = null, tit
   });
 
   const [error, setError] = useState('');
+  const [suggestedCategory, setSuggestedCategory] = useState('');
+  const [categorizingAI, setCategorizingAI] = useState(false);
+  const [aiSuggestionUsed, setAiSuggestionUsed] = useState(false);
+
+  // AI Categorization when description changes
+  const handleDescriptionChange = async (e) => {
+    const { value } = e.target;
+    setFormData(prev => ({ ...prev, description: value }));
+    if (error) setError('');
+
+    // Trigger AI categorization if description is meaningful
+    if (value.trim().length > 3 && !formData.category && !aiSuggestionUsed) {
+      setCategorizingAI(true);
+      try {
+        const response = await apiService.categorizeExpenseSmart(value.trim(), parseFloat(formData.amount) || 0);
+        if (response.success && response.category !== 'Other') {
+          setSuggestedCategory(response.category);
+        }
+      } catch (error) {
+        console.log('AI categorization failed, using fallback');
+      } finally {
+        setCategorizingAI(false);
+      }
+    }
+  };
+
+  const applySuggestedCategory = () => {
+    setFormData(prev => ({ ...prev, category: suggestedCategory }));
+    setAiSuggestionUsed(true);
+    setSuggestedCategory('');
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -440,11 +616,16 @@ function ExpenseFormModal({ onSubmit, onCancel, loading, initialData = null, tit
               type="text"
               name="description"
               value={formData.description}
-              onChange={handleChange}
+              onChange={handleDescriptionChange}
               placeholder="Coffee, Lunch, Gas, etc."
               style={modalStyles.input}
               required
             />
+            {categorizingAI && (
+              <div style={modalStyles.aiHint}>
+                🤖 AI is analyzing your expense...
+              </div>
+            )}
           </div>
 
           <div style={modalStyles.formGroup}>
@@ -464,13 +645,32 @@ function ExpenseFormModal({ onSubmit, onCancel, loading, initialData = null, tit
 
           <div style={modalStyles.formGroup}>
             <label style={modalStyles.label}>Category</label>
+            {suggestedCategory && !formData.category && (
+              <div style={modalStyles.aiSuggestion}>
+                <span>🤖 AI suggests: <strong>{suggestedCategory}</strong></span>
+                <button 
+                  type="button" 
+                  onClick={applySuggestedCategory}
+                  style={modalStyles.aiAcceptButton}
+                >
+                  Use This
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setSuggestedCategory('')}
+                  style={modalStyles.aiRejectButton}
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
             <select
               name="category"
               value={formData.category}
               onChange={handleChange}
               style={modalStyles.input}
             >
-              <option value="">Select Category (or leave for AI)</option>
+              <option value="">Select Category (AI will suggest)</option>
               <option value="Food & Dining">Food & Dining</option>
               <option value="Transportation">Transportation</option>
               <option value="Entertainment">Entertainment</option>
@@ -618,6 +818,46 @@ const modalStyles = {
     color: 'white',
     cursor: 'pointer',
     fontSize: '14px',
+  },
+  aiHint: {
+    color: '#6b7280',
+    fontSize: '12px',
+    fontStyle: 'italic',
+    marginTop: '4px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+  },
+  aiSuggestion: {
+    backgroundColor: '#f0f9ff',
+    border: '1px solid #0ea5e9',
+    borderRadius: '6px',
+    padding: '8px 12px',
+    marginBottom: '8px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    fontSize: '14px',
+  },
+  aiAcceptButton: {
+    backgroundColor: '#10b981',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '4px 8px',
+    fontSize: '12px',
+    cursor: 'pointer',
+    marginLeft: '8px',
+  },
+  aiRejectButton: {
+    backgroundColor: '#6b7280',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '4px 8px',
+    fontSize: '12px',
+    cursor: 'pointer',
+    marginLeft: '4px',
   },
 };
 
@@ -979,6 +1219,97 @@ const styles = {
     minWidth: '32px',
     height: '32px',
   },
+
+  // AI Insights Section Styles
+  aiInsightsSection: {
+    marginBottom: '32px',
+  },
+
+  loadingDot: {
+    color: '#3b82f6',
+    animation: 'pulse 1.5s ease-in-out infinite',
+    marginLeft: '8px',
+  },
+
+  adviceCard: {
+    backgroundColor: '#f0f9ff',
+    border: '1px solid #0ea5e9',
+    borderRadius: '12px',
+    padding: '20px',
+    marginBottom: '20px',
+  },
+
+  adviceTitle: {
+    color: '#0c4a6e',
+    fontSize: '16px',
+    fontWeight: '600',
+    margin: '0 0 12px 0',
+  },
+
+  adviceText: {
+    color: '#1e293b',
+    fontSize: '15px',
+    lineHeight: '1.6',
+    margin: '0 0 12px 0',
+  },
+
+  adviceMeta: {
+    display: 'flex',
+    gap: '8px',
+    fontSize: '12px',
+    color: '#64748b',
+    alignItems: 'center',
+  },
+
+  insightsGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+    gap: '16px',
+  },
+
+  insightTitle: {
+    color: '#374151',
+    fontSize: '14px',
+    fontWeight: '600',
+    margin: '0 0 12px 0',
+  },
+
+  categoryList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+
+  categoryItem: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    padding: '8px 0',
+    borderBottom: '1px solid #e5e7eb',
+    fontSize: '14px',
+  },
+
+  recommendationList: {
+    margin: '0',
+    paddingLeft: '16px',
+  },
+
+  recommendationItem: {
+    fontSize: '14px',
+    color: '#374151',
+    marginBottom: '6px',
+    lineHeight: '1.4',
+  },
+
+  miniSpinner: {
+    width: '12px',
+    height: '12px',
+    border: '2px solid #e5e7eb',
+    borderTop: '2px solid #3b82f6',
+    borderRadius: '50%',
+    animation: 'spin 1s linear infinite',
+    display: 'inline-block',
+    marginLeft: '8px',
+  },
 };
 
 // Add CSS keyframes for spinner animation
@@ -987,6 +1318,11 @@ styleSheet.textContent = `
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
+  }
+  
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
   }
   
   button:hover {

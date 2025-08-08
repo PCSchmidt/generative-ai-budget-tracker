@@ -7,8 +7,11 @@ pydantic[email]==2.5.0
 python-multipart==0.0.6
 
 # AI and ML dependencies
-transformers==4.36.0
-torch==2.1.0
-huggingface-hub==0.19.4
-groq==0.4.1
+transformers==4.46.0
+torch==2.8.0
+huggingface-hub==0.26.0
+groq==0.12.0
+scikit-learn==1.6.0
+pandas==2.2.3
+numpy==2.2.0
 requests==2.31.0

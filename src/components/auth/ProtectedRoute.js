@@ -11,6 +11,7 @@ import LoadingScreen from '../../screens/LoadingScreen';
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, isLoading, user } = useAuth();
 
+  // Temporary debug logging to help diagnose redirects
   console.log('ProtectedRoute - isAuthenticated:', isAuthenticated, 'isLoading:', isLoading, 'user:', user);
 
   if (isLoading) {
@@ -18,7 +19,7 @@ const ProtectedRoute = ({ children }) => {
   }
 
   if (!isAuthenticated) {
-    console.log('ProtectedRoute: User not authenticated, redirecting to login');
+    console.log('ProtectedRoute: User not authenticated, redirecting to /login');
     return <Navigate to="/login" replace />;
   }
 

@@ -112,10 +112,27 @@ export const AuthProvider = ({ children }) => {
     initializeAuth();
   }, []);
 
+  const migrateLegacyMockKeys = () => {
+    // Some older builds/extensions may have used mockAccessToken/mockRefreshToken
+    const legacyAccess = localStorage.getItem('mockAccessToken');
+    const legacyRefresh = localStorage.getItem('mockRefreshToken');
+    if (!localStorage.getItem('accessToken') && legacyAccess) {
+      console.log('AuthContext: Migrating legacy mockAccessToken to accessToken');
+      localStorage.setItem('accessToken', legacyAccess);
+    }
+    if (!localStorage.getItem('refreshToken') && legacyRefresh) {
+      console.log('AuthContext: Migrating legacy mockRefreshToken to refreshToken');
+      localStorage.setItem('refreshToken', legacyRefresh);
+    }
+  };
+
   const initializeAuth = async () => {
     try {
       console.log('AuthContext: Initializing authentication...');
       dispatch({ type: AUTH_ACTIONS.LOADING });
+
+      // Migrate legacy keys if present
+      migrateLegacyMockKeys();
 
       // Check if user data exists in localStorage
       const userString = localStorage.getItem('user');
@@ -128,21 +145,21 @@ export const AuthProvider = ({ children }) => {
         hasRefreshToken: !!refreshToken
       });
 
-      // Only treat as authenticated if ALL required data exists
-      if (userString && accessToken && refreshToken) {
+      // Treat as authenticated if we have a user and an access token (refresh token optional)
+      if (userString && accessToken) {
         try {
           const user = JSON.parse(userString);
-          console.log('AuthContext: Found valid stored auth data, restoring session for user:', user.email);
+          console.log('AuthContext: Restoring session for user:', user.email);
           
           // Initialize API service with the tokens
-          await ApiService.storeTokens(accessToken, refreshToken);
+          await ApiService.storeTokens(accessToken, refreshToken ?? null);
           
           dispatch({
             type: AUTH_ACTIONS.LOGIN_SUCCESS,
             payload: {
               user,
               accessToken,
-              refreshToken,
+              refreshToken: refreshToken ?? null,
             },
           });
           console.log('AuthContext: Session restored successfully');
@@ -177,17 +194,21 @@ export const AuthProvider = ({ children }) => {
       // Store user data and tokens in localStorage
       localStorage.setItem('user', JSON.stringify(result.user));
       localStorage.setItem('accessToken', result.access_token);
-      localStorage.setItem('refreshToken', result.refresh_token);
+      if (result.refresh_token) {
+        localStorage.setItem('refreshToken', result.refresh_token);
+      } else {
+        localStorage.removeItem('refreshToken');
+      }
 
       // Store tokens in API service
-      await ApiService.storeTokens(result.access_token, result.refresh_token);
+      await ApiService.storeTokens(result.access_token, result.refresh_token ?? null);
 
       dispatch({
         type: AUTH_ACTIONS.LOGIN_SUCCESS,
         payload: {
           user: result.user,
           accessToken: result.access_token,
-          refreshToken: result.refresh_token,
+          refreshToken: result.refresh_token ?? null,
         },
       });
 
@@ -213,17 +234,21 @@ export const AuthProvider = ({ children }) => {
       // Store user data and tokens in localStorage
       localStorage.setItem('user', JSON.stringify(result.user));
       localStorage.setItem('accessToken', result.access_token);
-      localStorage.setItem('refreshToken', result.refresh_token);
+      if (result.refresh_token) {
+        localStorage.setItem('refreshToken', result.refresh_token);
+      } else {
+        localStorage.removeItem('refreshToken');
+      }
 
       // Store tokens in API service
-      await ApiService.storeTokens(result.access_token, result.refresh_token);
+      await ApiService.storeTokens(result.access_token, result.refresh_token ?? null);
 
       dispatch({
         type: AUTH_ACTIONS.SIGNUP_SUCCESS,
         payload: {
           user: result.user,
           accessToken: result.access_token,
-          refreshToken: result.refresh_token,
+          refreshToken: result.refresh_token ?? null,
         },
       });
 

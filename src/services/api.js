@@ -14,7 +14,7 @@ class ApiService {
   constructor() {
     this.baseURL = API_BASE_URL;
     this.accessToken = null;
-    this.refreshToken = null;
+    this.refreshToken = null; // optional, backend may not provide
     this.mockService = new MockApiService();
     this.useMockService = false; // Force use of real backend for development
     this.backendChecked = false;
@@ -104,23 +104,35 @@ class ApiService {
       const refreshToken = localStorage.getItem('refreshToken');
       
       if (accessToken) this.accessToken = accessToken;
-      if (refreshToken) this.refreshToken = refreshToken;
+      // Only use refreshToken if it's a non-empty, non-'undefined' value
+      if (refreshToken && refreshToken !== 'undefined') {
+        this.refreshToken = refreshToken;
+      } else {
+        this.refreshToken = null;
+      }
       
-      return { accessToken, refreshToken };
+      return { accessToken, refreshToken: this.refreshToken };
     } catch (error) {
       console.error('Failed to load tokens:', error);
       return { accessToken: null, refreshToken: null };
     }
   }
 
-  // Store tokens securely
-  async storeTokens(accessToken, refreshToken) {
+  // Store tokens securely (refresh token optional)
+  async storeTokens(accessToken, refreshToken = null) {
     try {
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
-      
-      this.accessToken = accessToken;
-      this.refreshToken = refreshToken;
+      if (accessToken) {
+        localStorage.setItem('accessToken', accessToken);
+        this.accessToken = accessToken;
+      }
+      // Only persist refresh token if provided by backend
+      if (refreshToken && refreshToken !== 'undefined') {
+        localStorage.setItem('refreshToken', refreshToken);
+        this.refreshToken = refreshToken;
+      } else {
+        localStorage.removeItem('refreshToken');
+        this.refreshToken = null;
+      }
     } catch (error) {
       console.error('Failed to store tokens:', error);
       throw new Error('Failed to store authentication tokens');
@@ -143,7 +155,7 @@ class ApiService {
   // Get auth headers
   getAuthHeaders() {
     return {
-      'Authorization': `Bearer ${this.accessToken}`,
+      'Authorization': this.accessToken ? `Bearer ${this.accessToken}` : undefined,
       'Content-Type': 'application/json',
     };
   }
@@ -168,16 +180,7 @@ class ApiService {
     try {
       const response = await fetch(url, config);
       
-      // Handle 401 - try to refresh token
-      if (response.status === 401 && this.refreshToken) {
-        const refreshed = await this.refreshAccessToken();
-        if (refreshed) {
-          // Retry original request with new token
-          config.headers.Authorization = `Bearer ${this.accessToken}`;
-          return await fetch(url, config);
-        }
-      }
-
+      // Do NOT auto-refresh tokens (backend has no refresh endpoint)
       return response;
     } catch (error) {
       console.error('API Request failed:', error);
@@ -205,8 +208,8 @@ class ApiService {
         throw new Error(data.detail || 'Signup failed');
       }
 
-      // Store tokens and user data
-      await this.storeTokens(data.access_token, data.refresh_token);
+      // Store tokens and user data (refresh token optional)
+      await this.storeTokens(data.access_token, data.refresh_token ?? null);
       localStorage.setItem('user', JSON.stringify(data.user));
 
       return data; // Return the full response
@@ -233,8 +236,8 @@ class ApiService {
         throw new Error(data.detail || 'Login failed');
       }
 
-      // Store tokens and user data
-      await this.storeTokens(data.access_token, data.refresh_token);
+      // Store tokens and user data (refresh token optional)
+      await this.storeTokens(data.access_token, data.refresh_token ?? null);
       localStorage.setItem('user', JSON.stringify(data.user));
 
       return data; // Return the full response
@@ -251,7 +254,7 @@ class ApiService {
     }
 
     try {
-      // Call logout endpoint if we have a refresh token
+      // Call logout endpoint only if we truly have a refresh token and backend supports it
       if (this.refreshToken) {
         await this.request('/auth/logout', {
           method: 'POST',
@@ -270,31 +273,9 @@ class ApiService {
     }
   }
 
+  // Keep refreshAccessToken for future, but it's unused
   async refreshAccessToken() {
-    if (!this.refreshToken) return false;
-
-    try {
-      const response = await this.request('/auth/refresh', {
-        method: 'POST',
-        body: JSON.stringify({ refresh_token: this.refreshToken }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error('Token refresh failed');
-      }
-
-      // Update stored tokens
-      await this.storeTokens(data.access_token, data.refresh_token);
-
-      return true;
-    } catch (error) {
-      console.error('Token refresh failed:', error);
-      // Clear invalid tokens
-      await this.clearTokens();
-      return false;
-    }
+    return false;
   }
 
   // User profile endpoints
@@ -459,6 +440,271 @@ class ApiService {
     }
   }
 
+  // ======= NEW ML-POWERED ENDPOINTS =======
+
+  // Smart AI categorization endpoint
+  async categorizeExpenseSmart(description, amount = null) {
+    await this.checkBackendAvailability();
+    
+    if (this.useMockService) {
+      // Mock smart categorization for offline development
+      return {
+        success: true,
+        categorization: {
+          category: this.mockService.categorizeExpense(description),
+          confidence: 0.75,
+          method: 'mock_ai',
+          reasoning: 'Mock AI categorization for development'
+        },
+        ml_enhanced: false
+      };
+    }
+
+    try {
+      const params = new URLSearchParams({ description });
+      if (amount !== null) params.append('amount', amount.toString());
+      
+      const response = await this.request(`/api/ai/categorize-smart?${params}`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Smart categorization failed');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Smart categorization error:', error);
+      // Fallback to basic categorization
+      return {
+        success: false,
+        error: error.message,
+        categorization: {
+          category: 'Miscellaneous',
+          confidence: 0.1,
+          method: 'fallback',
+          reasoning: 'Error during categorization'
+        }
+      };
+    }
+  }
+
+  // Get personalized financial advice
+  async getFinancialAdvice(adviceType = 'general', includeProfile = false) {
+    await this.checkBackendAvailability();
+    
+    if (this.useMockService) {
+      // Mock financial advice for offline development
+      return {
+        success: true,
+        advice: {
+          advice_type: adviceType,
+          main_advice: "Continue tracking your expenses to identify spending patterns and opportunities for improvement.",
+          action_items: [
+            "Review your largest expense categories",
+            "Set up automatic savings transfers",
+            "Track daily expenses for better awareness"
+          ],
+          confidence: 0.6,
+          processing_method: 'mock_advisor'
+        },
+        expense_count: 5,
+        ml_enhanced: false
+      };
+    }
+
+    try {
+      const params = new URLSearchParams({ advice_type: adviceType });
+      if (includeProfile) params.append('include_profile', 'true');
+      
+      const response = await this.request(`/api/ai/financial-advice?${params}`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to get financial advice');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Financial advice error:', error);
+      return {
+        success: false,
+        error: error.message,
+        advice: {
+          main_advice: "Unable to generate personalized advice at this time. Continue tracking expenses for better insights.",
+          action_items: ["Keep tracking expenses"],
+          confidence: 0.1
+        }
+      };
+    }
+  }
+
+  // Get spending insights and patterns
+  async getSpendingInsights() {
+    await this.checkBackendAvailability();
+    
+    if (this.useMockService) {
+      // Mock spending insights for offline development
+      return {
+        success: true,
+        insights: {
+          total_spending: 1250.75,
+          category_breakdown: {
+            'Food & Dining': 450.25,
+            'Transportation': 320.50,
+            'Entertainment': 180.00,
+            'Shopping': 200.00,
+            'Miscellaneous': 100.00
+          },
+          expense_count: 12,
+          average_expense: 104.23,
+          recommendations: [
+            "Consider meal planning to reduce dining expenses",
+            "Review transportation alternatives",
+            "Set a monthly entertainment budget"
+          ]
+        },
+        expense_count: 12,
+        ml_enhanced: false
+      };
+    }
+
+    try {
+      const response = await this.request('/api/ai/spending-insights');
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to get spending insights');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Spending insights error:', error);
+      return {
+        success: false,
+        error: error.message,
+        insights: {
+          error: "Unable to generate insights at this time"
+        }
+      };
+    }
+  }
+
+  // Get AI system status
+  async getAISystemStatus() {
+    await this.checkBackendAvailability();
+    
+    if (this.useMockService) {
+      return {
+        ai_available: false,
+        ml_enhanced: false,
+        services: {
+          basic_categorization: "mock_only",
+          financial_advisor: "unavailable",
+          spending_insights: "basic_only"
+        },
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    try {
+      const response = await this.request('/api/ai/status');
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to get AI status');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('AI status error:', error);
+      return {
+        ai_available: false,
+        ml_enhanced: false,
+        error: error.message,
+        timestamp: new Date().toISOString()
+      };
+    }
+  }
+
+  // Batch categorize multiple expenses
+  async batchCategorizeExpenses(descriptions) {
+    await this.checkBackendAvailability();
+    
+    if (this.useMockService) {
+      // Mock batch categorization
+      return {
+        success: true,
+        results: descriptions.map((desc, index) => ({
+          index,
+          description: desc,
+          categorization: {
+            category: this.mockService.categorizeExpense(desc),
+            confidence: 0.6,
+            method: 'mock_batch'
+          }
+        })),
+        total_processed: descriptions.length,
+        ml_enhanced: false
+      };
+    }
+
+    try {
+      const response = await this.request('/api/ai/batch-categorize', {
+        method: 'POST',
+        body: JSON.stringify({ expense_descriptions: descriptions }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Batch categorization failed');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Batch categorization error:', error);
+      return {
+        success: false,
+        error: error.message,
+        results: []
+      };
+    }
+  }
+
+  // Enhanced expense creation with smart categorization
+  async createExpenseWithAI(expenseData) {
+    await this.checkBackendAvailability();
+    
+    // If no category provided, get AI suggestion first
+    if (!expenseData.category && expenseData.description) {
+      try {
+        console.log('🤖 Getting AI categorization for:', expenseData.description);
+        const categorizationResult = await this.categorizeExpenseSmart(
+          expenseData.description, 
+          expenseData.amount
+        );
+        
+        if (categorizationResult.success) {
+          expenseData.category = categorizationResult.categorization.category;
+          console.log('✅ AI suggested category:', expenseData.category);
+        }
+      } catch (error) {
+        console.warn('⚠️ AI categorization failed, proceeding without category:', error);
+      }
+    }
+    
+    // Create expense using existing method
+    return await this.createExpense(expenseData);
+  }
+
   // Analytics endpoints (ready for future implementation)
   async getAnalytics(period = 'month') {
     try {
@@ -474,6 +720,41 @@ class ApiService {
       return {
         success: false,
         error: error.message || 'Failed to get analytics',
+      };
+    }
+  }
+
+  // NEW: Simple AI categorization (no auth required)
+  async categorizeExpense(description, amount = null) {
+    await this.checkBackendAvailability();
+
+    if (this.useMockService) {
+      return {
+        success: true,
+        category: this.mockService.categorizeExpense(description),
+        confidence: 0.6,
+        method: 'mock_public_ai'
+      };
+    }
+
+    try {
+      const params = new URLSearchParams({ description });
+      if (amount !== null && !Number.isNaN(Number(amount))) params.append('amount', String(amount));
+
+      const response = await this.request(`/api/ai/categorize?${params.toString()}`, { method: 'POST' });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || 'Categorization failed');
+      }
+      return data; // { success, category, confidence, method }
+    } catch (error) {
+      console.error('Public categorization error:', error);
+      return {
+        success: false,
+        category: 'Miscellaneous',
+        confidence: 0.1,
+        method: 'fallback',
+        error: error.message
       };
     }
   }
