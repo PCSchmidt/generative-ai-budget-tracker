@@ -6,6 +6,7 @@ name: 🚀 App CI/CD + Portfolio Update
 on:
   push:
     branches: [ main, develop ]
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main ]
   release:
@@ -107,3 +108,30 @@ jobs:
             "demo_url": "https://huggingface.co/spaces/pcschmidt/app-name",
             "timestamp": "${{ github.event.repository.updated_at }}"
           }
+
+  # New job: only runs on tag pushes that start with v*
+  tag-guard:
+    name: 🔏 Validate Release Tag
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [ test-backend, test-frontend ]
+    runs-on: ubuntu-latest
+    steps:
+      - name: 🏗️ Checkout
+        uses: actions/checkout@v4
+      - name: Extract tag
+        id: tag
+        run: echo "tag_name=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      - name: Enforce semantic version pattern (vMAJOR.MINOR.PATCH)
+        run: |
+          TAG=${{ steps.tag.outputs.tag_name }}
+          echo "Validating tag: $TAG"
+          if [[ ! $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "❌ Tag '$TAG' invalid. Use vMAJOR.MINOR.PATCH (e.g. v0.4.0)"; exit 1; fi
+          echo "✅ Tag pattern OK"
+      - name: Optional warning for major bump pre-1.0
+        run: |
+          TAG=${{ steps.tag.outputs.tag_name }}
+          if [[ $TAG =~ ^v1\.[0-9]+\.[0-9]+$ ]]; then
+            echo "⚠️ Major version 1 reached. Ensure readiness."; fi
+      - name: Summary
+        run: echo "Tag guard passed for ${{ steps.tag.outputs.tag_name }}"
