@@ -133,5 +133,12 @@ jobs:
           TAG=${{ steps.tag.outputs.tag_name }}
           if [[ $TAG =~ ^v1\.[0-9]+\.[0-9]+$ ]]; then
             echo "⚠️ Major version 1 reached. Ensure readiness."; fi
+      - name: Generate draft release notes
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=${{ steps.tag.outputs.tag_name }}
+          echo "Generating draft release notes for $TAG"
+          gh release view "$TAG" >/dev/null 2>&1 && echo "Release already exists" || gh release create "$TAG" --draft --title "$TAG" --notes "Auto-draft: review and enhance notes. See CHANGELOG.md for details."
       - name: Summary
-        run: echo "Tag guard passed for ${{ steps.tag.outputs.tag_name }}"
+        run: echo "Tag guard passed for ${{ steps.tag.outputs.tag_name }} and draft release prepared"
