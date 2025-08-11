@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import apiService from '../../services/api';
+import { buildCategoryBreakdown, getCategoryMeta, formatCurrency as fmt } from '../../utils/categories';
 
 export default function DashboardScreen() {
   const { user, logout } = useAuth();
@@ -30,6 +31,18 @@ export default function DashboardScreen() {
   const [loadingMLData, setLoadingMLData] = useState(false);
   const [showAIInsights, setShowAIInsights] = useState(false);
 
+  // Budgets and Goals states
+  const [budgets, setBudgets] = useState([]);
+  const [goals, setGoals] = useState([]);
+  const [loadingPortfolios, setLoadingPortfolios] = useState(false);
+  const [showContributeGoal, setShowContributeGoal] = useState(null);
+  const [contributing, setContributing] = useState(false);
+  // New Budget & Goal CRUD state
+  const [showBudgetModal, setShowBudgetModal] = useState(false);
+  const [editingBudget, setEditingBudget] = useState(null);
+  const [showGoalModal, setShowGoalModal] = useState(false);
+  const [editingGoal, setEditingGoal] = useState(null);
+
   // Debug: Log auth state
   console.log('DashboardScreen - user:', user);
   console.log('DashboardScreen - localStorage tokens:', {
@@ -41,6 +54,7 @@ export default function DashboardScreen() {
   useEffect(() => {
     loadDashboardData();
     loadAISystemStatus();
+    loadBudgetsAndGoals();
   }, []);
 
   const loadDashboardData = async () => {
@@ -114,6 +128,19 @@ export default function DashboardScreen() {
     } finally {
       setLoadingMLData(false);
     }
+  };
+
+  const loadBudgetsAndGoals = async () => {
+    try {
+      setLoadingPortfolios(true);
+      const [bRes, gRes] = await Promise.all([
+        apiService.getBudgets().catch(()=>[]),
+        apiService.getGoals().catch(()=>[])
+      ]);
+      setBudgets(bRes.budgets || bRes || []);
+      setGoals(gRes.goals || gRes || []);
+    } catch(e){ console.warn('Budget/Goal load failed', e); }
+    finally { setLoadingPortfolios(false); }
   };
 
   const formatCurrency = (amount) => {
@@ -194,45 +221,41 @@ export default function DashboardScreen() {
     }
   };
 
-  // Helper function to get category icons
-  const getCategoryIcon = (category) => {
-    const icons = {
-      'Food & Dining': '🍽️',
-      'Transportation': '🚗',
-      'Entertainment': '🎬',
-      'Utilities': '💡',
-      'Housing': '🏠',
-      'Healthcare': '🏥',
-      'Shopping': '🛍️',
-      'Other': '💳'
-    };
-    return icons[category] || '💳';
-  };
-
-  // Helper function to format date
-  const formatDate = (dateString) => {
-    if (!dateString) return '';
+  // ==== Budget Handlers ====
+  const handleCreateBudget = async (data) => {
     try {
-      const date = new Date(dateString);
-      const today = new Date();
-      const yesterday = new Date(today);
-      yesterday.setDate(yesterday.getDate() - 1);
-      
-      if (date.toDateString() === today.toDateString()) {
-        return 'Today';
-      } else if (date.toDateString() === yesterday.toDateString()) {
-        return 'Yesterday';
-      } else {
-        return date.toLocaleDateString('en-US', { 
-          month: 'short', 
-          day: 'numeric',
-          year: date.getFullYear() !== today.getFullYear() ? 'numeric' : undefined
-        });
-      }
-    } catch (error) {
-      return dateString.split('T')[0]; // Fallback to raw date
-    }
+      await apiService.createBudget(data);
+      await loadBudgetsAndGoals();
+      setShowBudgetModal(false);
+    } catch (e) { alert('Failed to create budget: ' + e.message); }
   };
+  const handleUpdateBudget = async (id, data) => {
+    try {
+      await apiService.updateBudget(id, data);
+      await loadBudgetsAndGoals();
+      setEditingBudget(null);
+    } catch (e) { alert('Failed to update budget: ' + e.message); }
+  };
+  const handleDeleteBudget = async (b) => {
+    if(!window.confirm('Delete budget '+ b.period +'?')) return;
+    try { await apiService.deleteBudget(b.id); await loadBudgetsAndGoals(); } catch(e){ alert('Failed to delete budget: '+e.message);} }
+
+  // ==== Goal Handlers ====
+  const handleCreateGoal = async (data) => {
+    try {
+      await apiService.createGoal(data);
+      await loadBudgetsAndGoals();
+      setShowGoalModal(false);
+    } catch (e) { alert('Failed to create goal: ' + e.message); }
+  };
+  const handleUpdateGoal = async (id, data) => {
+    try {
+      await apiService.updateGoal(id, data);
+      await loadBudgetsAndGoals();
+      setEditingGoal(null);
+    } catch (e) { alert('Failed to update goal: ' + e.message); }
+  };
+  const handleDeleteGoal = async (g) => { if(!window.confirm('Delete goal '+ g.name +'?')) return; try { await apiService.deleteGoal(g.id); await loadBudgetsAndGoals(); } catch(e){ alert('Failed to delete goal: '+e.message);} }
 
   if (loading) {
     return (
@@ -272,13 +295,26 @@ export default function DashboardScreen() {
         {/* Summary Cards with ML Insights */}
         <section style={styles.summarySection}>
           <div style={styles.summaryCard}>
-            <h3 style={styles.cardTitle}>Total Expenses</h3>
-            <p style={styles.cardAmount}>
-              {formatCurrency(expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0))}
-            </p>
-            <p style={styles.cardSubtext}>{expenses.length} transactions</p>
+            <h3 style={styles.cardTitle}>Month To Date</h3>
+            <p style={styles.cardAmount}>{fmt(monthlyTotals.total)}</p>
+            <p style={styles.cardSubtext}>Avg {fmt(monthlyTotals.avg)}</p>
           </div>
-
+          {/* Budget summary */}
+          <div style={styles.summaryCard}>
+            <h3 style={styles.cardTitle}>Budget Utilization</h3>
+            {monthlyBudget ? (
+              <>
+                <p style={styles.cardAmount}>{Math.round((monthlyBudget.utilization||0)*100)}%</p>
+                <p style={styles.cardSubtext}>{fmt(monthlyBudget.spent_amount)} / {fmt(monthlyBudget.total_limit)}</p>
+              </>
+            ) : <p style={styles.cardSubtext}>No budget this month</p>}
+          </div>
+          {/* Goals summary */}
+          <div style={styles.summaryCard}>
+            <h3 style={styles.cardTitle}>Active Goals</h3>
+            <p style={styles.cardAmount}>{goals.length}</p>
+            <p style={styles.cardSubtext}>Tracking savings</p>
+          </div>
           <div style={styles.summaryCard}>
             <h3 style={styles.cardTitle}>AI Analysis</h3>
             <p style={styles.cardAmount}>
@@ -290,17 +326,6 @@ export default function DashboardScreen() {
             <p style={styles.cardSubtext}>
               {aiSystemStatus?.ml_enhanced ? '🤖 AI Enhanced' : '📊 Basic Analysis'}
             </p>
-          </div>
-
-          <div style={styles.summaryCard}>
-            <h3 style={styles.cardTitle}>Smart Insights</h3>
-            <p style={styles.cardAmount}>
-              {spendingInsights?.insights?.recommendations?.length || 0}
-            </p>
-            <p style={styles.cardSubtext}>AI recommendations</p>
-            {loadingMLData && (
-              <div style={styles.miniSpinner}></div>
-            )}
           </div>
         </section>
 
@@ -494,6 +519,76 @@ export default function DashboardScreen() {
             </div>
           </section>
         )}
+
+        {/* Budgets Section */}
+        <section style={styles.portfolioSection}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <h2 style={styles.sectionTitle}>Budgets</h2>
+            <button style={styles.smallActionBtn} onClick={()=> setShowBudgetModal(true)}>+ Budget</button>
+          </div>
+          {monthlyBudget ? (
+            <div style={styles.budgetCardWrapper}>
+              {budgets.map(b => {
+                const over = (b.utilization||0) > 1;
+                const pct = Math.min(1, b.utilization||0);
+                return (
+                  <div key={b.id} style={{...styles.budgetCard, borderColor: over ? '#dc2626':'#e2e8f0'}}>
+                    <div style={styles.budgetHeader}>
+                      <strong>{b.period}</strong>
+                      <span style={{color: over?'#dc2626':'#64748b'}}>{Math.round((b.utilization||0)*100)}%</span>
+                    </div>
+                    <div style={styles.progressBarOuter}>
+                      <div style={{...styles.progressBarInner, background: over?'linear-gradient(90deg,#dc2626,#ef4444)':'linear-gradient(90deg,#2563eb,#3b82f6)', width: `${pct*100}%`}} />
+                    </div>
+                    <div style={styles.budgetMeta}>
+                      <span>{fmt(b.spent_amount)} / {fmt(b.total_limit)}</span>
+                      <span style={{color: over?'#dc2626':'#10b981'}}>{over? `${fmt(b.spent_amount - b.total_limit)} over` : `${fmt(b.total_limit - b.spent_amount)} left`}</span>
+                    </div>
+                    <div style={styles.inlineActions}>
+                      <button style={styles.inlineEditBtn} onClick={()=> setEditingBudget(b)}>Edit</button>
+                      <button style={styles.inlineDeleteBtn} onClick={()=> handleDeleteBudget(b)}>Del</button>
+                    </div>
+                  </div>
+                )})}
+            </div>
+          ) : (
+            <div style={styles.emptyInline}>No budgets yet</div>
+          )}
+        </section>
+
+        {/* Goals Section */}
+        <section style={styles.portfolioSection}>
+          <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+            <h2 style={styles.sectionTitle}>Goals</h2>
+            <button style={styles.smallActionBtn} onClick={()=> setShowGoalModal(true)}>+ Goal</button>
+          </div>
+          {goals.length ? (
+            <div style={styles.goalsGrid}>
+              {goals.map(g => {
+                const pct = Math.min(100, g.progress_percent || (g.current_amount && g.target_amount? (g.current_amount / g.target_amount * 100):0));
+                return (
+                  <div key={g.id} style={styles.goalCard}>
+                    <div style={styles.goalHeader}>
+                      <strong style={styles.goalName}>{g.name}</strong>
+                      <span style={styles.goalPct}>{Math.round(pct)}%</span>
+                    </div>
+                    <div style={styles.progressBarOuterSmall}>
+                      <div style={{...styles.progressBarInnerSmall, width: `${pct}%`, background: pct>=100? '#10b981':'linear-gradient(90deg,#6366f1,#8b5cf6)'}} />
+                    </div>
+                    <div style={styles.goalMeta}>
+                      <span>{fmt(g.current_amount)} / {fmt(g.target_amount)}</span>
+                      {pct>=100 && <span style={styles.goalComplete}>Complete</span>}
+                    </div>
+                    <div style={styles.inlineActions}>
+                      <button style={styles.inlineEditBtn} onClick={()=> setEditingGoal(g)}>Edit</button>
+                      <button style={styles.inlineDeleteBtn} onClick={()=> handleDeleteGoal(g)}>Del</button>
+                    </div>
+                    <button style={styles.contributeBtn} onClick={()=>setShowContributeGoal(g)}>Contribute</button>
+                  </div>
+                )})}
+            </div>
+          ) : <div style={styles.emptyInline}>No goals yet</div>}
+        </section>
       </main>
 
       {/* Add Expense Modal */}
@@ -513,6 +608,50 @@ export default function DashboardScreen() {
           loading={addingExpense}
           initialData={editingExpense}
           title="Edit Expense"
+        />
+      )}
+
+      {/* Contribute to Goal Modal */}
+      {showContributeGoal && (
+        <ContributeModal
+          goal={showContributeGoal}
+          onCancel={()=>setShowContributeGoal(null)}
+          onSubmit={async (amount)=>{
+            try { setContributing(true); await apiService.contributeGoal(showContributeGoal.id, amount); await loadBudgetsAndGoals(); setShowContributeGoal(null);} finally { setContributing(false);} }}
+          loading={contributing}
+        />
+      )}
+
+      {/* Budget Create Modal */}
+      {showBudgetModal && (
+        <BudgetFormModal
+          onCancel={()=> setShowBudgetModal(false)}
+          onSubmit={handleCreateBudget}
+        />
+      )}
+      {/* Budget Edit Modal */}
+      {editingBudget && (
+        <BudgetFormModal
+          initialData={editingBudget}
+          onCancel={()=> setEditingBudget(null)}
+          onSubmit={(data)=> handleUpdateBudget(editingBudget.id, data)}
+          title="Edit Budget"
+        />
+      )}
+      {/* Goal Create Modal */}
+      {showGoalModal && (
+        <GoalFormModal
+          onCancel={()=> setShowGoalModal(false)}
+          onSubmit={handleCreateGoal}
+        />
+      )}
+      {/* Goal Edit Modal */}
+      {editingGoal && (
+        <GoalFormModal
+          initialData={editingGoal}
+          onCancel={()=> setEditingGoal(null)}
+          onSubmit={(data)=> handleUpdateGoal(editingGoal.id, data)}
+          title="Edit Goal"
         />
       )}
     </div>
@@ -724,6 +863,86 @@ function ExpenseFormModal({ onSubmit, onCancel, loading, initialData = null, tit
             >
               {loading ? 'Adding...' : 'Add Expense'}
             </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function ContributeModal({ goal, onCancel, onSubmit, loading }) {
+  const [amount, setAmount] = useState('');
+  return (
+    <div style={modalStyles.overlay}>
+      <div style={modalStyles.modal}>
+        <h2 style={modalStyles.title}>Contribute to {goal.name}</h2>
+        <form onSubmit={(e)=>{e.preventDefault(); const val=parseFloat(amount); if(!val||val<=0)return; onSubmit(val);}}>
+          <div style={modalStyles.formGroup}>
+            <label style={modalStyles.label}>Amount</label>
+            <input style={modalStyles.input} type="number" min="0" step="0.01" value={amount} onChange={e=>setAmount(e.target.value)} />
+          </div>
+          <div style={modalStyles.buttons}>
+            <button type="button" style={modalStyles.cancelButton} onClick={onCancel} disabled={loading}>Cancel</button>
+            <button type="submit" style={modalStyles.submitButton} disabled={loading}>{loading? 'Saving...':'Add Contribution'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// New Budget Form Modal
+function BudgetFormModal({ onSubmit, onCancel, initialData=null, title='New Budget' }) {
+  const [form, setForm] = useState(()=> initialData ? { period: initialData.period, total_limit: initialData.total_limit } : { period:'', total_limit:'' });
+  const handleChange = e => setForm(f=> ({...f, [e.target.name]: e.target.value}));
+  const handleSubmit = e => { e.preventDefault(); if(!form.period || !form.total_limit) return; onSubmit({ period: form.period, total_limit: parseFloat(form.total_limit) }); };
+  return (
+    <div style={modalStyles.overlay}>
+      <div style={modalStyles.modal}>
+        <h2 style={modalStyles.title}>{title}</h2>
+        <form onSubmit={handleSubmit}>
+          <div style={modalStyles.formGroup}>
+            <label style={modalStyles.label}>Period (YYYY-MM)</label>
+            <input name="period" value={form.period} onChange={handleChange} placeholder="2025-08" style={modalStyles.input} required={!initialData} disabled={!!initialData} />
+          </div>
+          <div style={modalStyles.formGroup}>
+            <label style={modalStyles.label}>Total Limit</label>
+            <input name="total_limit" type="number" min="0" step="0.01" value={form.total_limit} onChange={handleChange} style={modalStyles.input} required />
+          </div>
+          <div style={modalStyles.buttons}>
+            <button type="button" style={modalStyles.cancelButton} onClick={onCancel}>Cancel</button>
+            <button type="submit" style={modalStyles.submitButton}>{initialData? 'Save':'Create'}</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function GoalFormModal({ onSubmit, onCancel, initialData=null, title='New Goal' }) {
+  const [form, setForm] = useState(()=> initialData ? { name: initialData.name, target_amount: initialData.target_amount, current_amount: initialData.current_amount } : { name:'', target_amount:'', current_amount:'0' });
+  const handleChange = e => setForm(f=> ({...f, [e.target.name]: e.target.value}));
+  const handleSubmit = e => { e.preventDefault(); if(!form.name || !form.target_amount) return; onSubmit({ name: form.name, target_amount: parseFloat(form.target_amount), current_amount: parseFloat(form.current_amount||0) }); };
+  return (
+    <div style={modalStyles.overlay}>
+      <div style={modalStyles.modal}>
+        <h2 style={modalStyles.title}>{title}</h2>
+        <form onSubmit={handleSubmit}>
+          <div style={modalStyles.formGroup}>
+            <label style={modalStyles.label}>Name</label>
+            <input name="name" value={form.name} onChange={handleChange} style={modalStyles.input} required />
+          </div>
+          <div style={modalStyles.formGroup}>
+            <label style={modalStyles.label}>Target Amount</label>
+            <input name="target_amount" type="number" min="0" step="0.01" value={form.target_amount} onChange={handleChange} style={modalStyles.input} required />
+          </div>
+          <div style={modalStyles.formGroup}>
+            <label style={modalStyles.label}>Current Amount</label>
+            <input name="current_amount" type="number" min="0" step="0.01" value={form.current_amount} onChange={handleChange} style={modalStyles.input} />
+          </div>
+          <div style={modalStyles.buttons}>
+            <button type="button" style={modalStyles.cancelButton} onClick={onCancel}>Cancel</button>
+            <button type="submit" style={modalStyles.submitButton}>{initialData? 'Save':'Create'}</button>
           </div>
         </form>
       </div>
@@ -1310,6 +1529,29 @@ const styles = {
     display: 'inline-block',
     marginLeft: '8px',
   },
+
+  portfolioSection: { marginBottom: '32px' },
+  budgetCardWrapper: { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'16px'},
+  budgetCard: { background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'16px', display:'flex', flexDirection:'column', gap:'8px' },
+  budgetHeader: { display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#475569' },
+  progressBarOuter: { position:'relative', height:'12px', background:'#f1f5f9', borderRadius:'8px', overflow:'hidden' },
+  progressBarInner: { position:'absolute', left:0, top:0, bottom:0, borderRadius:'8px', transition:'width .4s ease' },
+  budgetMeta: { display:'flex', justifyContent:'space-between', fontSize:'12px', color:'#64748b' },
+  emptyInline: { fontSize:'14px', color:'#94a3b8' },
+  goalsGrid: { display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:'16px' },
+  goalCard: { background:'#fff', border:'1px solid #e2e8f0', borderRadius:'12px', padding:'16px', display:'flex', flexDirection:'column', gap:'6px' },
+  goalHeader: { display:'flex', justifyContent:'space-between', fontSize:'14px', color:'#475569' },
+  goalName: { fontWeight:600 },
+  goalPct: { fontWeight:600, color:'#6366f1' },
+  progressBarOuterSmall: { position:'relative', height:'8px', background:'#f1f5f9', borderRadius:'6px', overflow:'hidden' },
+  progressBarInnerSmall: { position:'absolute', left:0, top:0, bottom:0, borderRadius:'6px', transition:'width .4s ease' },
+  goalMeta: { display:'flex', justifyContent:'space-between', fontSize:'12px', color:'#64748b' },
+  goalComplete: { color:'#10b981', fontWeight:600 },
+  contributeBtn: { marginTop:'4px', background:'#2563eb', color:'#fff', border:'none', borderRadius:'6px', padding:'6px 10px', fontSize:'12px', cursor:'pointer' },
+  inlineActions: { display:'flex', gap:'6px', marginTop:'4px' },
+  inlineEditBtn: { background:'#f1f5f9', border:'1px solid #cbd5e1', borderRadius:'4px', padding:'4px 6px', fontSize:'11px', cursor:'pointer' },
+  inlineDeleteBtn: { background:'#fff5f5', border:'1px solid #fecaca', borderRadius:'4px', padding:'4px 6px', fontSize:'11px', cursor:'pointer', color:'#dc2626' },
+  smallActionBtn: { background:'#2563eb', color:'#fff', border:'none', borderRadius:'6px', padding:'6px 12px', fontSize:'13px', cursor:'pointer' },
 };
 
 // Add CSS keyframes for spinner animation

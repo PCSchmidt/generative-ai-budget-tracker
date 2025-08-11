@@ -6,6 +6,11 @@ bcrypt==4.0.1
 pydantic[email]==2.5.0
 python-multipart==0.0.6
 
+# Database
+SQLAlchemy==2.0.31
+alembic==1.13.2
+psycopg2-binary==2.9.9
+
 # AI and ML dependencies
 transformers==4.46.0
 torch==2.8.0
@@ -15,3 +20,12 @@ scikit-learn==1.6.0
 pandas==2.2.3
 numpy==2.2.0
 requests==2.31.0
+
+# Rate limiting
+slowapi==0.1.9
+
+# Testing
+httpx==0.24.1
+pytest==8.4.1
+pytest-asyncio==0.23.8
+freezegun==1.5.1

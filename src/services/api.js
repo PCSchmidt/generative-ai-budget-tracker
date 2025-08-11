@@ -758,6 +758,63 @@ class ApiService {
       };
     }
   }
+
+  // NEW: Budgets API
+  async getBudgets() {
+    await this.checkBackendAvailability();
+    const response = await this.request('/api/budgets');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Failed to load budgets');
+    return data; // Expect { budgets: [...] } or list
+  }
+  async createBudget(payload) {
+    const response = await this.request('/api/budgets', { method: 'POST', body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Failed to create budget');
+    return data;
+  }
+  async updateBudget(id, payload) {
+    const response = await this.request(`/api/budgets/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Failed to update budget');
+    return data;
+  }
+  async deleteBudget(id) {
+    const response = await this.request(`/api/budgets/${id}`, { method: 'DELETE' });
+    if (!response.ok) { try { const d = await response.json(); throw new Error(d.detail||'Failed to delete budget'); } catch { throw new Error('Failed to delete budget'); } }
+    return { success: true };
+  }
+  // NEW: Goals API
+  async getGoals() {
+    await this.checkBackendAvailability();
+    const response = await this.request('/api/goals');
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Failed to load goals');
+    return data;
+  }
+  async createGoal(payload) {
+    const response = await this.request('/api/goals', { method: 'POST', body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Failed to create goal');
+    return data;
+  }
+  async updateGoal(id, payload) {
+    const response = await this.request(`/api/goals/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Failed to update goal');
+    return data;
+  }
+  async deleteGoal(id) {
+    const response = await this.request(`/api/goals/${id}`, { method: 'DELETE' });
+    if (!response.ok) { try { const d = await response.json(); throw new Error(d.detail||'Failed to delete goal'); } catch { throw new Error('Failed to delete goal'); } }
+    return { success: true };
+  }
+  async contributeGoal(id, amount) {
+    const response = await this.request(`/api/goals/${id}/contribute`, { method: 'POST', body: JSON.stringify({ amount }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || 'Failed to contribute');
+    return data;
+  }
 }
 
 // Export singleton instance

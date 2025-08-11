@@ -1,27 +1,48 @@
 """
 AI Budget Tracker FastAPI Backend
-Phase 2: Core Integration Backend
+Phase 2: Core Integration Backend (Refactored for modular auth & expenses)
 """
 
-from fastapi import FastAPI, HTTPException, Depends, status
+from fastapi import FastAPI, HTTPException, Depends, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from typing import List, Optional
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 from jose import jwt
 import bcrypt
 import os
 import re
 from pathlib import Path
 import sys
-import os
+from sqlalchemy.orm import Session
+from app.database import get_db
+from app.auth.models import User, Expense, RefreshToken
+
+# Import modular routers
+from app.auth.routes import router as auth_router
+from app.expenses.routes import router as expenses_router
+from app.budgets.routes import router as budgets_router
+from app.goals.routes import router as goals_router
+from app.auth.dependencies import get_current_user
+
+# Add text for raw SQL in health
+from sqlalchemy import text
+from fastapi.responses import JSONResponse
+from app.logging_config import setup_logging
+import logging, json, uuid, time
+import threading
+from collections import OrderedDict
 
 # Add the current directory to Python path for imports
 current_dir = os.path.dirname(os.path.abspath(__file__))
 backend_dir = os.path.dirname(current_dir)  # Go up one level to backend
 sys.path.insert(0, current_dir)
 sys.path.insert(0, backend_dir)
+
+# Database setup
+from app.database import Base, engine
+from sqlalchemy.exc import SQLAlchemyError
 
 try:
     # Import from our new services directory
@@ -160,12 +181,43 @@ except ImportError as e:
             "recommendations": []
         }
 
+# Record application start time for uptime calculation (timezone-aware)
+APP_START_TIME = datetime.now(timezone.utc)
+
 # Create FastAPI app
 app = FastAPI(
     title="AI Budget Tracker API",
     description="Backend API for AI-powered expense tracking",
     version="2.0.0"
 )
+
+# Request ID middleware
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    req_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    start = time.time()
+    # attach to state
+    request.state.request_id = req_id
+    response = None
+    try:
+        response = await call_next(request)
+        return response
+    finally:
+        duration_ms = (time.time() - start) * 1000.0
+        status_code = response.status_code if response else 500
+        user_id = getattr(request.state, "user_id", None)
+        log_record = {
+            "event": "http_access",
+            "request_id": req_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status": status_code,
+            "duration_ms": round(duration_ms, 2),
+            "user_id": user_id,
+        }
+        logger.info(json.dumps(log_record))
+        if response:
+            response.headers["X-Request-ID"] = req_id
 
 # CORS middleware for frontend integration
 app.add_middleware(
@@ -177,84 +229,49 @@ app.add_middleware(
 )
 
 # Security
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
-
-# In-memory storage (replace with database in production)
-users_db = {}
-expenses_db = {}
-user_counter = 1
-expense_counter = 1
+DEFAULT_SECRET_PLACEHOLDER = "your-secret-key-change-in-production"
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
+# Configurable bcrypt rounds (default 12; lower in tests)
+BCRYPT_ROUNDS = int(os.getenv("BCRYPT_ROUNDS", "12"))
+if os.getenv("TESTING") == "1":
+    BCRYPT_ROUNDS = min(BCRYPT_ROUNDS, 4)
+if SECRET_KEY == DEFAULT_SECRET_PLACEHOLDER or len(SECRET_KEY) < 32:
+    raise RuntimeError(
+        "SECURITY ERROR: SECRET_KEY is unset, default, or too short (<32 chars). Set a strong SECRET_KEY env var before starting the app."
+    )
 
 # Utility functions (defined early for use in test data)
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=BCRYPT_ROUNDS)).decode('utf-8')
 
 def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
+# Replace create_access_token with env-configured expiry & timezone-aware
+
+def _utc_now():
+    return datetime.now(timezone.utc)
+
+def _coerce_utc(dt: datetime | None):
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
 def create_access_token(user_id: int) -> str:
-    payload = {"user_id": user_id, "exp": datetime.utcnow().timestamp() + 3600}
+    expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload = {"user_id": user_id, "exp": int(expire.timestamp())}
     return jwt.encode(payload, SECRET_KEY, algorithm="HS256")
 
-# Initialize test data for development
-def initialize_test_data():
-    global user_counter, expense_counter
-    
-    # Add test user: demo@budgettracker.com / password123
-    test_user = {
-        "id": user_counter,
-        "email": "demo@budgettracker.com",
-        "password": hash_password("password123"),
-        "first_name": "Demo",
-        "last_name": "User",
-        "created_at": datetime.utcnow()
-    }
-    users_db["demo@budgettracker.com"] = test_user
-    user_counter += 1
-    
-    # Add some sample expenses for the demo user
-    sample_expenses = [
-        {
-            "id": expense_counter,
-            "user_id": test_user["id"],
-            "description": "Coffee at Starbucks",
-            "amount": 4.95,
-            "category": "Food & Dining",
-            "expense_date": date.today(),
-            "notes": "Morning coffee",
-            "created_at": datetime.utcnow()
-        },
-        {
-            "id": expense_counter + 1,
-            "user_id": test_user["id"],
-            "description": "Uber ride home",
-            "amount": 12.50,
-            "category": "Transportation",
-            "expense_date": date.today(),
-            "notes": "",
-            "created_at": datetime.utcnow()
-        },
-        {
-            "id": expense_counter + 2,
-            "user_id": test_user["id"],
-            "description": "Netflix subscription",
-            "amount": 15.99,
-            "category": "Entertainment",
-            "expense_date": date.today(),
-            "notes": "Monthly subscription",
-            "created_at": datetime.utcnow()
-        }
-    ]
-    
-    for expense in sample_expenses:
-        expenses_db[expense["id"]] = expense
-        expense_counter += 1
-    
-    print(f"✅ Test data initialized: 1 user, {len(sample_expenses)} expenses")
-
-# Initialize test data when the module loads
-initialize_test_data()
+# Remove automatic metadata.create_all bootstrap to enforce Alembic migrations
+# (Was previously here). If you attempt to use legacy ALLOW_BOOTSTRAP, fail fast with guidance.
+if os.getenv("ALLOW_BOOTSTRAP") == "1":
+    raise RuntimeError(
+        "Deprecated: ALLOW_BOOTSTRAP path removed. Use Alembic migrations instead (run 'alembic upgrade head') and unset ALLOW_BOOTSTRAP."
+    )
 
 # Pydantic models
 class UserSignup(BaseModel):
@@ -262,19 +279,35 @@ class UserSignup(BaseModel):
     password: str
     first_name: Optional[str] = ""
     last_name: Optional[str] = ""
-    
-    @validator('email')
+
+    @field_validator('email')
+    @classmethod
     def validate_email(cls, v):
         email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         if not re.match(email_pattern, v):
             raise ValueError('Invalid email format')
         return v.lower()
 
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v):
+        # Password policy: min 8 chars, at least 1 upper, 1 lower, 1 digit
+        if len(v) < 8:
+            raise ValueError('Password must be at least 8 characters')
+        if not re.search(r'[A-Z]', v):
+            raise ValueError('Password must include an uppercase letter')
+        if not re.search(r'[a-z]', v):
+            raise ValueError('Password must include a lowercase letter')
+        if not re.search(r'[0-9]', v):
+            raise ValueError('Password must include a digit')
+        return v
+
 class UserLogin(BaseModel):
     email: str
     password: str
-    
-    @validator('email')
+
+    @field_validator('email')
+    @classmethod
     def validate_email(cls, v):
         email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
         if not re.match(email_pattern, v):
@@ -314,43 +347,137 @@ class TokenResponse(BaseModel):
     access_token: str
     user: UserResponse
 
-def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=["HS256"])
-        user_id = payload.get("user_id")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        
-        # Find user by ID from all users in the database
-        user = None
-        for email, user_data in users_db.items():
-            if user_data["id"] == user_id:
-                user = user_data
-                break
-        
-        if user is None:
-            raise HTTPException(status_code=401, detail="User not found")
-        
-        return user
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expired")
-    except jwt.JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+class AuthPairResponse(TokenResponse):
+    refresh_token: str | None = None
 
-async def categorize_expense(description: str, amount: float = None) -> str:
-    """AI-powered expense categorization with rule-based fallback"""
-    try:
-        # Try AI categorization first
-        category = await categorize_expense_ai(description, amount)
-        return category
-    except Exception as e:
-        print(f"⚠️ AI categorization failed, using rules: {e}")
-        # Fallback to rule-based categorization
-        return categorize_expense_rules(description)
+# Initialize logging
+setup_logging()
+logger = logging.getLogger("access")
+security_logger = logging.getLogger("security")
+ai_logger = logging.getLogger("ai")
 
-def categorize_expense_sync(description: str) -> str:
-    """Synchronous version for backward compatibility"""
-    return categorize_expense_rules(description)
+# (Remove old auth helpers and endpoints; rely on auth_router & expenses_router now)
+# Keep AI categorization, dashboard, cache endpoints.
+
+# Include routers
+app.include_router(auth_router)
+app.include_router(expenses_router)
+app.include_router(budgets_router)
+app.include_router(goals_router)
+
+# ======= SIMPLE IN-MEMORY TTL CACHE (AI RESULTS) =======
+CACHE_TTL_SECONDS = int(os.getenv("CACHE_TTL_SECONDS", "300"))  # 5 min default
+CACHE_MAX_ITEMS = int(os.getenv("CACHE_MAX_ITEMS", "500"))
+
+class _TTLCache:
+    def __init__(self, max_items: int, ttl_seconds: int):
+        self.store: OrderedDict[str, tuple] = OrderedDict()
+        self.max_items = max_items
+        self.ttl = ttl_seconds
+        self.lock = threading.Lock()
+        self.hits = 0
+        self.misses = 0
+        self.evictions = 0
+
+    def _purge_expired(self):
+        now = time.time()
+        expired_keys = [k for k, (_, ts) in self.store.items() if now - ts > self.ttl]
+        for k in expired_keys:
+            self.store.pop(k, None)
+
+    def get(self, key: str):
+        with self.lock:
+            self._purge_expired()
+            if key in self.store:
+                value, ts = self.store[key]
+                if time.time() - ts <= self.ttl:
+                    # move to end (recently used)
+                    self.store.move_to_end(key)
+                    self.hits += 1
+                    return value
+                else:
+                    self.store.pop(key, None)
+            self.misses += 1
+            return None
+
+    def set(self, key: str, value):
+        with self.lock:
+            if key in self.store:
+                self.store.move_to_end(key)
+            self.store[key] = (value, time.time())
+            if len(self.store) > self.max_items:
+                # evict oldest
+                self.store.popitem(last=False)
+                self.evictions += 1
+
+    def stats(self):
+        with self.lock:
+            return {
+                "items": len(self.store),
+                "hits": self.hits,
+                "misses": self.misses,
+                "evictions": self.evictions,
+                "hit_rate": round(self.hits / (self.hits + self.misses), 3) if (self.hits + self.misses) else 0.0,
+                "ttl_seconds": self.ttl,
+                "max_items": self.max_items,
+            }
+
+_ai_cache = _TTLCache(CACHE_MAX_ITEMS, CACHE_TTL_SECONDS)
+
+def _norm_desc(desc: str) -> str:
+    return (desc or "").strip().lower()
+
+def _cat_key(description: str, amount: float, user_id: str | None) -> str:
+    amt_bucket = None if amount is None else round(float(amount), 2)
+    return f"cat|{user_id or 'anon'}|{_norm_desc(description)}|{amt_bucket}"
+
+def _advice_key(expense_count: int, total_amount: float, user_id: str | None, advice_type: str) -> str:
+    return f"advice|{user_id or 'anon'}|{advice_type}|{expense_count}|{round(total_amount,2)}"
+
+def _insights_key(expense_count: int, total_amount: float, user_id: str | None) -> str:
+    return f"insights|{user_id or 'anon'}|{expense_count}|{round(total_amount,2)}"
+
+# Public stats endpoint (optional; lightweight)
+@app.get("/api/cache/stats")
+async def cache_stats():
+    return {"cache": _ai_cache.stats()}
+
+# Wrapper helpers used by endpoints
+async def cached_categorize(description: str, amount: float | None, user_id: str | None):
+    key = _cat_key(description, amount, user_id)
+    cached = _ai_cache.get(key)
+    if cached is not None:
+        ai_logger.debug(f"cache_hit categorization key={key}")
+        return cached
+    ai_logger.debug(f"cache_miss categorization key={key}")
+    # Delegate to existing detailed function (handles ML/fallback)
+    result = await categorize_expense_detailed(description=description, amount=amount, user_id=user_id)
+    _ai_cache.set(key, result)
+    return result
+
+async def cached_financial_advice(expenses: list, user_id: str | None, advice_type: str):
+    total_amount = sum(e.get("amount", 0) for e in expenses)
+    key = _advice_key(len(expenses), total_amount, user_id, advice_type)
+    cached = _ai_cache.get(key)
+    if cached is not None:
+        ai_logger.debug(f"cache_hit advice key={key}")
+        return cached
+    ai_logger.debug(f"cache_miss advice key={key}")
+    result = await get_financial_advice(expenses=expenses, user_profile=None, advice_type=advice_type)
+    _ai_cache.set(key, result)
+    return result
+
+async def cached_spending_insights(expenses: list, user_id: str | None):
+    total_amount = sum(e.get("amount", 0) for e in expenses)
+    key = _insights_key(len(expenses), total_amount, user_id)
+    cached = _ai_cache.get(key)
+    if cached is not None:
+        ai_logger.debug(f"cache_hit insights key={key}")
+        return cached
+    ai_logger.debug(f"cache_miss insights key={key}")
+    result = await get_spending_insights(expenses)
+    _ai_cache.set(key, result)
+    return result
 
 # Routes
 @app.get("/")
@@ -358,8 +485,36 @@ async def root():
     return {"message": "AI Budget Tracker API", "version": "2.0.0", "status": "running"}
 
 @app.get("/health")
-async def health_check():
-    return {"status": "healthy", "version": "2.0.0"}
+async def health_check(db: Session = Depends(get_db)):
+    """Comprehensive health check including DB, AI subsystem status, migration revision, and uptime."""
+    db_ok = False
+    db_error = None
+    alembic_rev = None
+    try:
+        db.execute(text("SELECT 1"))
+        db_ok = True
+        # Attempt to read alembic revision
+        try:
+            result = db.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
+            row = result.first()
+            if row:
+                alembic_rev = row[0]
+        except Exception:
+            # alembic_version table may not exist yet
+            alembic_rev = None
+    except SQLAlchemyError as e:
+        db_error = str(e)
+
+    uptime_seconds = (datetime.now(timezone.utc) - APP_START_TIME).total_seconds()
+
+    return {
+        "status": "healthy" if db_ok else "degraded",
+        "version": "2.0.0",
+        "db": {"ok": db_ok, "error": db_error, "alembic_revision": alembic_rev},
+        "ai": {"ai_available": 'AI_AVAILABLE' in globals() and AI_AVAILABLE, "ml_enhanced": 'ML_ENHANCED' in globals() and ML_ENHANCED},
+        "uptime_seconds": uptime_seconds,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
 
 # Test AI categorization endpoint with better error handling
 @app.post("/api/categorize-test")
@@ -389,7 +544,7 @@ async def test_categorization(description: str, amount: float = None):
             "amount": amount,
             "predicted_category": category,
             "method": method,
-            "timestamp": datetime.utcnow(),
+            "timestamp": datetime.now(timezone.utc),
             "debug_info": {
                 "ai_available": AI_AVAILABLE,
                 "ml_enhanced": ML_ENHANCED
@@ -432,268 +587,41 @@ async def test_categorization(description: str, amount: float = None):
                 }
             )
 
-# Authentication routes
-@app.post("/auth/signup", response_model=TokenResponse)
-async def signup(user_data: UserSignup):
-    global user_counter
-    
-    # Check if user exists
-    for user in users_db.values():
-        if user["email"] == user_data.email:
-            raise HTTPException(status_code=400, detail="Email already registered")
-    
-    # Create user
-    user_id = user_counter
-    user_counter += 1
-    
-    hashed_password = hash_password(user_data.password)
-    
-    user = {
-        "id": user_id,
-        "email": user_data.email,
-        "first_name": user_data.first_name,
-        "last_name": user_data.last_name,
-        "password": hashed_password,
-        "created_at": datetime.utcnow()
-    }
-    
-    users_db[user_id] = user
-    
-    # Create token
-    token = create_access_token(user_id)
-    
-    # Return user without password
-    user_response = UserResponse(
-        id=user["id"],
-        email=user["email"],
-        first_name=user["first_name"],
-        last_name=user["last_name"]
-    )
-    
-    return TokenResponse(access_token=token, user=user_response)
-
-@app.post("/auth/login", response_model=TokenResponse)
-async def login(user_data: UserLogin):
-    # Find user
-    user = None
-    for u in users_db.values():
-        if u["email"] == user_data.email:
-            user = u
-            break
-    
-    if not user or not verify_password(user_data.password, user["password"]):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
-    
-    # Create token
-    token = create_access_token(user["id"])
-    
-    # Return user without password
-    user_response = UserResponse(
-        id=user["id"],
-        email=user["email"],
-        first_name=user["first_name"],
-        last_name=user["last_name"]
-    )
-    
-    return TokenResponse(access_token=token, user=user_response)
-
-# Expense routes
-@app.get("/api/expenses", response_model=List[ExpenseResponse])
-async def get_expenses(current_user=Depends(get_current_user)):
-    user_expenses = []
-    for expense in expenses_db.values():
-        if expense["user_id"] == current_user["id"]:
-            user_expenses.append(ExpenseResponse(**expense))
-    
-    # Sort by date (newest first)
-    user_expenses.sort(key=lambda x: x.created_at, reverse=True)
-    return user_expenses
-
-@app.post("/api/expenses", response_model=ExpenseResponse)
-async def create_expense(expense_data: ExpenseCreate, current_user=Depends(get_current_user)):
-    global expense_counter
-    
-    # Enhanced auto-categorization with ML
-    if expense_data.category:
-        category = expense_data.category
-        categorization_info = {
-            "category": category,
-            "confidence": 1.0,
-            "method": "user_provided",
-            "reasoning": "Category provided by user"
-        }
-    else:
-        try:
-            if ML_ENHANCED:
-                # Use enhanced ML categorization
-                categorization_result = await categorize_expense_detailed(
-                    description=expense_data.description,
-                    amount=expense_data.amount,
-                    user_id=str(current_user["id"])
-                )
-                category = categorization_result["category"]
-                categorization_info = categorization_result
-                print(f"✅ Enhanced ML categorized '{expense_data.description}' as '{category}' ({categorization_result['confidence']:.2f} confidence)")
-            else:
-                # Fallback to basic categorization
-                if AI_AVAILABLE:
-                    category = await categorize_expense_ai(expense_data.description, expense_data.amount)
-                else:
-                    category = categorize_expense_rules(expense_data.description)
-                
-                categorization_info = {
-                    "category": category,
-                    "confidence": 0.5,
-                    "method": "basic_ai" if AI_AVAILABLE else "rules",
-                    "reasoning": "Basic categorization"
-                }
-                print(f"✅ Basic categorized '{expense_data.description}' as '{category}'")
-        
-        except Exception as e:
-            print(f"❌ Categorization failed: {e}")
-            category = "Other"
-            categorization_info = {
-                "category": "Other",
-                "confidence": 0.1,
-                "method": "error_fallback",
-                "reasoning": f"Categorization error: {str(e)}"
-            }
-    
-    expense_id = expense_counter
-    expense_counter += 1
-    
-    expense = {
-        "id": expense_id,
-        "user_id": current_user["id"],
-        "description": expense_data.description,
-        "amount": expense_data.amount,
-        "category": category,
-        "expense_date": expense_data.expense_date or date.today(),
-        "notes": expense_data.notes,
-        "created_at": datetime.utcnow(),
-        # Store categorization metadata for debugging/learning
-        "categorization_meta": categorization_info
-    }
-    
-    expenses_db[expense_id] = expense
-    
-    # Create response without categorization metadata (keep API clean)
-    response_data = {k: v for k, v in expense.items() if k != "categorization_meta"}
-    
-    return ExpenseResponse(**response_data)
-
-@app.get("/api/expenses/{expense_id}", response_model=ExpenseResponse)
-async def get_expense(expense_id: int, current_user=Depends(get_current_user)):
-    expense = expenses_db.get(expense_id)
-    
-    if not expense or expense["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=404, detail="Expense not found")
-    
-    return ExpenseResponse(**expense)
-
-@app.put("/api/expenses/{expense_id}", response_model=ExpenseResponse)
-async def update_expense(expense_id: int, expense_data: ExpenseUpdate, current_user=Depends(get_current_user)):
-    expense = expenses_db.get(expense_id)
-    
-    if not expense or expense["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=404, detail="Expense not found")
-    
-    # Update fields
-    if expense_data.description is not None:
-        expense["description"] = expense_data.description
-    if expense_data.amount is not None:
-        expense["amount"] = expense_data.amount
-    if expense_data.category is not None:
-        expense["category"] = expense_data.category
-    if expense_data.expense_date is not None:
-        expense["expense_date"] = expense_data.expense_date
-    if expense_data.notes is not None:
-        expense["notes"] = expense_data.notes
-    
-    expenses_db[expense_id] = expense
-    
-    return ExpenseResponse(**expense)
-
-@app.delete("/api/expenses/{expense_id}")
-async def delete_expense(expense_id: int, current_user=Depends(get_current_user)):
-    expense = expenses_db.get(expense_id)
-    
-    if not expense or expense["user_id"] != current_user["id"]:
-        raise HTTPException(status_code=404, detail="Expense not found")
-    
-    del expenses_db[expense_id]
-    
-    return {"message": "Expense deleted successfully"}
-
-# Dashboard routes
-@app.get("/api/dashboard/summary")
-async def get_dashboard_summary(current_user=Depends(get_current_user)):
-    user_expenses = [exp for exp in expenses_db.values() if exp["user_id"] == current_user["id"]]
-    
-    total_expenses = len(user_expenses)
-    total_amount = sum(exp["amount"] for exp in user_expenses)
-    
-    # This month's expenses
-    current_month = datetime.now().month
-    current_year = datetime.now().year
-    this_month_expenses = [
-        exp for exp in user_expenses 
-        if exp["expense_date"].month == current_month and exp["expense_date"].year == current_year
-    ]
-    this_month_amount = sum(exp["amount"] for exp in this_month_expenses)
-    
-    # Category breakdown
-    categories = {}
-    for exp in user_expenses:
-        category = exp["category"]
-        categories[category] = categories.get(category, 0) + exp["amount"]
-    
-    return {
-        "total_expenses": total_expenses,
-        "total_amount": total_amount,
-        "this_month_amount": this_month_amount,
-        "this_month_expenses": len(this_month_expenses),
-        "categories": categories
-    }
-
 # ======= NEW ML-POWERED ENDPOINTS =======
 
 # Simple categorization endpoint (no auth required for testing)
 @app.post("/api/ai/categorize")
 async def categorize_expense_endpoint(
     description: str,
-    amount: Optional[float] = None
+    amount: Optional[float] = None,
+    request: Request = None
 ):
     """
     Simple AI categorization endpoint for frontend integration
     """
     try:
         if ML_ENHANCED:
-            result = await categorize_expense_detailed(
-                description=description,
-                amount=amount,
-                user_id=None  # No user context for public endpoint
-            )
+            result = await cached_categorize(description=description, amount=amount, user_id=None)
             return {
                 "success": True,
                 "category": result["category"],
                 "confidence": result["confidence"],
-                "method": result["method"]
+                "method": result["method"],
+                "cache": True  # indicate caching path used (hit or miss not distinguished here)
             }
         else:
-            # Fallback to basic categorization
+            # Fallback to basic categorization (no caching since lightweight)
             if AI_AVAILABLE:
                 category = await categorize_expense_ai(description, amount)
             else:
                 category = categorize_expense_rules(description)
-            
             return {
                 "success": True,
                 "category": category,
                 "confidence": 0.5,
-                "method": "basic_ai" if AI_AVAILABLE else "rules"
+                "method": "basic_ai" if AI_AVAILABLE else "rules",
+                "cache": False
             }
-    
     except Exception as e:
         print(f"❌ Categorization error: {e}")
         return {
@@ -709,22 +637,20 @@ async def categorize_expense_endpoint(
 async def smart_categorize_expense(
     description: str,
     amount: Optional[float] = None,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    request: Request = None
 ):
     """
     Enhanced ML-powered expense categorization with detailed results
     """
     try:
         if ML_ENHANCED:
-            result = await categorize_expense_detailed(
-                description=description,
-                amount=amount,
-                user_id=str(current_user["id"])
-            )
+            result = await cached_categorize(description=description, amount=amount, user_id=str(current_user["id"]))
             return {
                 "success": True,
                 "categorization": result,
-                "ml_enhanced": True
+                "ml_enhanced": True,
+                "cache": True
             }
         else:
             # Fallback to basic AI
@@ -732,7 +658,6 @@ async def smart_categorize_expense(
                 category = await categorize_expense_ai(description, amount)
             else:
                 category = categorize_expense_rules(description)
-            
             return {
                 "success": True,
                 "categorization": {
@@ -741,9 +666,9 @@ async def smart_categorize_expense(
                     "method": "basic_ai" if AI_AVAILABLE else "rules",
                     "reasoning": "Basic categorization (ML enhancement unavailable)"
                 },
-                "ml_enhanced": False
+                "ml_enhanced": False,
+                "cache": False
             }
-    
     except Exception as e:
         print(f"❌ Smart categorization error: {e}")
         return {
@@ -762,7 +687,9 @@ async def smart_categorize_expense(
 async def get_user_financial_advice(
     advice_type: str = "general",
     include_profile: bool = False,
-    current_user=Depends(get_current_user)
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db),
+    request: Request = None
 ):
     """
     Generate personalized financial advice based on user's spending patterns
@@ -771,13 +698,12 @@ async def get_user_financial_advice(
         # Get user's expenses
         user_expenses = [
             {
-                "description": exp["description"],
-                "amount": exp["amount"],
-                "category": exp["category"],
-                "date": exp["expense_date"].isoformat() if hasattr(exp["expense_date"], 'isoformat') else str(exp["expense_date"])
+                "description": e.description,
+                "amount": e.amount,
+                "category": e.category or "Other",
+                "date": e.expense_date.isoformat()
             }
-            for exp in expenses_db.values() 
-            if exp["user_id"] == current_user["id"]
+            for e in db.query(Expense).filter(Expense.user_id == current_user["id"]).all()
         ]
         
         # Basic user profile (can be enhanced with actual user data)
@@ -787,17 +713,13 @@ async def get_user_financial_advice(
         } if include_profile else None
         
         if ML_ENHANCED:
-            advice = await get_financial_advice(
-                expenses=user_expenses,
-                user_profile=user_profile,
-                advice_type=advice_type
-            )
-            
+            advice = await cached_financial_advice(expenses=user_expenses, user_id=str(current_user["id"]), advice_type=advice_type)
             return {
                 "success": True,
                 "advice": advice,
                 "expense_count": len(user_expenses),
-                "ml_enhanced": True
+                "ml_enhanced": True,
+                "cache": True
             }
         else:
             # Fallback advice
@@ -815,9 +737,9 @@ async def get_user_financial_advice(
                     "processing_method": "basic_fallback"
                 },
                 "expense_count": len(user_expenses),
-                "ml_enhanced": False
+                "ml_enhanced": False,
+                "cache": False
             }
-    
     except Exception as e:
         print(f"❌ Financial advice error: {e}")
         return {
@@ -832,32 +754,32 @@ async def get_user_financial_advice(
 
 # Spending insights endpoint
 @app.get("/api/ai/spending-insights")
-async def get_user_spending_insights(current_user=Depends(get_current_user)):
+async def get_user_spending_insights(request: Request, current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Get detailed spending insights and patterns for the user
     """
     try:
         # Get user's expenses with more detail
-        user_expenses = []
-        for exp in expenses_db.values():
-            if exp["user_id"] == current_user["id"]:
-                user_expenses.append({
-                    "id": exp["id"],
-                    "description": exp["description"],
-                    "amount": exp["amount"],
-                    "category": exp["category"],
-                    "date": exp["expense_date"].isoformat() if hasattr(exp["expense_date"], 'isoformat') else str(exp["expense_date"]),
-                    "notes": exp.get("notes", "")
-                })
+        user_expenses = [
+            {
+                "id": e.id,
+                "description": e.description,
+                "amount": e.amount,
+                "category": e.category or "Other",
+                "date": e.expense_date.isoformat(),
+                "notes": e.notes or ""
+            }
+            for e in db.query(Expense).filter(Expense.user_id == current_user["id"]).all()
+        ]
         
         if ML_ENHANCED:
-            insights = await get_spending_insights(user_expenses)
-            
+            insights = await cached_spending_insights(user_expenses, user_id=str(current_user["id"]))
             return {
                 "success": True,
                 "insights": insights,
                 "expense_count": len(user_expenses),
-                "ml_enhanced": True
+                "ml_enhanced": True,
+                "cache": True
             }
         else:
             # Basic insights fallback
@@ -880,9 +802,9 @@ async def get_user_spending_insights(current_user=Depends(get_current_user)):
                     ]
                 },
                 "expense_count": len(user_expenses),
-                "ml_enhanced": False
+                "ml_enhanced": False,
+                "cache": False
             }
-    
     except Exception as e:
         print(f"❌ Spending insights error: {e}")
         return {
@@ -902,7 +824,7 @@ async def get_ai_system_status():
     status = {
         "ai_available": AI_AVAILABLE,
         "ml_enhanced": ML_ENHANCED,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
     
     if ML_ENHANCED:
@@ -935,6 +857,7 @@ async def get_ai_system_status():
 @app.post("/api/ai/batch-categorize")
 async def batch_categorize_expenses(
     expense_descriptions: List[str],
+    request: Request,
     current_user=Depends(get_current_user)
 ):
     """
@@ -993,6 +916,55 @@ async def batch_categorize_expenses(
             "error": str(e),
             "results": []
         }
+
+# Define categorize_expense wrapper only if underlying function exists
+async def categorize_expense(description: str, amount: float = None):
+    try:
+        return await categorize_expense_ai(description, amount)  # type: ignore
+    except Exception:
+        return categorize_expense_rules(description)  # type: ignore
+
+try:
+    from slowapi import Limiter
+    from slowapi.util import get_remote_address
+except ImportError:
+    Limiter = None  # type: ignore
+    get_remote_address = None  # type: ignore
+
+# Rate limiter setup remains; adjust wrapping to only wrap endpoints that exist locally now
+if Limiter and get_remote_address:
+    limiter = Limiter(key_func=get_remote_address, default_limits=["300/hour"])  # redefine after refactor
+else:
+    limiter = None
+
+# After all route definitions, configure rate limiting decorators and handlers if limiter available
+if limiter:
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.middleware import SlowAPIMiddleware
+
+    app.state.limiter = limiter
+    app.add_middleware(SlowAPIMiddleware)
+
+    @app.exception_handler(RateLimitExceeded)
+    async def rate_limit_handler(request, exc):
+        req_id = getattr(request.state, 'request_id', None)
+        security_logger.warning(json.dumps({
+            "event": "rate_limit_exceeded",
+            "request_id": req_id,
+            "path": request.url.path,
+            "remote_addr": request.client.host if request.client else None,
+            "detail": str(exc)
+        }))
+        return JSONResponse(status_code=429, content={
+            "detail": "Rate limit exceeded",
+            "request_id": req_id
+        })
+    # Only apply to AI endpoints retained here
+    categorize_expense_endpoint = limiter.limit("30/minute")(categorize_expense_endpoint)
+    smart_categorize_expense = limiter.limit("100/hour")(smart_categorize_expense)
+    get_user_financial_advice = limiter.limit("100/hour")(get_user_financial_advice)
+    get_user_spending_insights = limiter.limit("100/hour")(get_user_spending_insights)
+    batch_categorize_expenses = limiter.limit("100/hour")(batch_categorize_expenses)
 
 if __name__ == "__main__":
     import uvicorn

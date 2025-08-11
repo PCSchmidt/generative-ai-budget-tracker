@@ -8,7 +8,7 @@ import re
 import logging
 from typing import Dict, Optional, List
 import requests
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
@@ -204,7 +204,7 @@ class ExpenseCategorizer:
             "predicted_category": predicted_category,
             "confidence_factors": confidence_factors,
             "description": description,
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timezone.utc).isoformat()
         }
 
 # Global instance

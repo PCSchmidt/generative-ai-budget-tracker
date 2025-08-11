@@ -33,6 +33,8 @@ jobs:
   test-backend:
     runs-on: ubuntu-latest
     needs: [commit-lint]
+    env:
+      DATABASE_URL: sqlite:///./test.db  # Zero-cost ephemeral DB for CI
     steps:
     - name: 🏗️ Checkout
       uses: actions/checkout@v4
@@ -41,12 +43,43 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: '3.9'
+
+    - name: ♻️ Cache pip
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: pip-${{ runner.os }}-${{ hashFiles('backend/requirements.txt') }}
+        restore-keys: |
+          pip-${{ runner.os }}-
         
     - name: 📦 Install Backend Dependencies
       run: |
         cd backend
         pip install -r requirements.txt
-        
+
+    - name: 🗄️ Run Alembic Migrations
+      run: |
+        cd backend
+        echo "Using DATABASE_URL=$DATABASE_URL"
+        alembic upgrade head
+        alembic current
+
+    - name: 🔍 Verify Schema (users & expenses tables present)
+      run: |
+        python - <<'PY'
+        import sqlite3, sys
+        conn = sqlite3.connect('test.db')
+        cur = conn.cursor()
+        required = ['users','expenses']
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        existing = {r[0] for r in cur.fetchall()}
+        missing = [t for t in required if t not in existing]
+        if missing:
+            print('❌ Missing tables:', missing)
+            sys.exit(1)
+        print('✅ All required tables present:', required)
+        PY
+
     - name: 🧪 Run Backend Tests
       run: |
         cd backend
@@ -86,7 +119,9 @@ jobs:
     - name: 🚀 Deploy to Production
       run: |
         echo "🚀 Deploying app to production..."
-        # Add your deployment commands here
+        # BEFORE starting app on Railway / server, ensure migrations are applied, e.g.:
+        # alembic upgrade head
+        # (Add platform-specific deployment command here)
         
     - name: 📊 Update Portfolio Statistics
       if: success()
