@@ -5,6 +5,20 @@
 
 import MockApiService from './mockApi';
 
+// Simple event emitter for cross-component notifications
+const listeners = new Map();
+function on(event, cb) {
+  if (!listeners.has(event)) listeners.set(event, new Set());
+  listeners.get(event).add(cb);
+  return () => listeners.get(event)?.delete(cb);
+}
+function emit(event, payload) {
+  const set = listeners.get(event);
+  if (set) set.forEach((cb) => {
+    try { cb(payload); } catch {}
+  });
+}
+
 // API Configuration
 const API_BASE_URL = process.env.NODE_ENV === 'development' 
   ? 'http://localhost:8000'  // Local development
@@ -26,6 +40,17 @@ class ApiService {
       this.useMockService = false;
       this.backendChecked = false;
     }
+  }
+
+  // Public status getter for dev badge
+  getStatus() {
+    return {
+      baseURL: this.baseURL,
+      usingMock: this.useMockService,
+  checked: this.backendChecked,
+  ts: Date.now(),
+  healthURL: `${this.baseURL}/health`,
+    };
   }
 
   // Check if backend is available
@@ -52,17 +77,20 @@ class ApiService {
           this.useMockService = false;
           this.backendChecked = true;
           console.log('✅ Backend is available and responding');
+          emit('backend_status', this.getStatus());
           return true;
         } else {
           console.warn('⚠️ Backend responded but with error status:', response.status);
           this.useMockService = true;
           this.backendChecked = true;
+          emit('backend_status', this.getStatus());
           return false;
         }
       } catch (error) {
         console.error('❌ Backend connection failed:', error.message);
         this.useMockService = true;
         this.backendChecked = true;
+        emit('backend_status', this.getStatus());
         return false;
       }
     }
@@ -80,20 +108,21 @@ class ApiService {
       });
       
       clearTimeout(timeoutId);
-      this.useMockService = !response.ok;
-      this.backendChecked = true;
+  this.useMockService = !response.ok;
+  this.backendChecked = true;
       
-      if (this.useMockService) {
+  if (this.useMockService) {
         console.log('🚧 Backend not available, using mock service for development');
       } else {
         console.log('✅ Backend is available');
       }
-      
+  emit('backend_status', this.getStatus());
       return !this.useMockService;
     } catch (error) {
       console.log('🚧 Backend not available, using mock service for development');
       this.useMockService = true;
       this.backendChecked = true;
+  emit('backend_status', this.getStatus());
       return false;
     }
   }
@@ -161,10 +190,10 @@ class ApiService {
     };
   }
 
-  // Make authenticated request
-  async request(endpoint, options = {}) {
+  // Make authenticated request (with one-time auto refresh on 401)
+  async request(endpoint, options = {}, retry = true) {
     const url = `${this.baseURL}${endpoint}`;
-    
+
     const config = {
       ...options,
       headers: {
@@ -180,8 +209,33 @@ class ApiService {
 
     try {
       const response = await fetch(url, config);
-      
-      // Do NOT auto-refresh tokens (backend has no refresh endpoint)
+
+      // Attempt a one-time silent refresh if unauthorized and we have a refresh token
+      if (response.status === 401 && retry && this.refreshToken) {
+        try {
+          const refreshResp = await fetch(`${this.baseURL}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: this.refreshToken })
+          });
+
+          if (refreshResp.ok) {
+            const data = await refreshResp.json();
+            await this.storeTokens(data.access_token, data.refresh_token ?? null);
+            emit('token_refreshed', { ts: Date.now() });
+            // Retry original request once with new token
+            const retryConfig = { ...config, headers: { ...config.headers, Authorization: `Bearer ${this.accessToken}` } };
+            return await this.request(endpoint, retryConfig, false);
+          } else {
+            // Refresh failed; clear and propagate original response
+            await this.clearTokens();
+          }
+        } catch (e) {
+          // Network/other error on refresh; clear tokens
+          await this.clearTokens();
+        }
+      }
+
       return response;
     } catch (error) {
       console.error('API Request failed:', error);
@@ -328,6 +382,79 @@ class ApiService {
       return data; // Return data directly for compatibility
     } catch (error) {
       console.error('Get expenses error:', error);
+      throw error;
+    }
+  }
+
+  // Paginated expenses with optional month (YYYY-MM)
+  async getExpensesPaginated({ page = 1, page_size = 10, month = null } = {}) {
+    await this.checkBackendAvailability();
+
+    if (this.useMockService) {
+      // Simple mock pagination/filtering
+      const res = await this.mockService.getExpenses();
+      let list = res.expenses || res || [];
+      if (month) {
+        list = list.filter(e => String(e.expense_date || e.created_at || '').startsWith(month));
+      }
+      const total = list.length;
+      const start = (page - 1) * page_size;
+      const items = list.slice(start, start + page_size);
+      return { items, total, page, page_size };
+    }
+
+    try {
+      const params = new URLSearchParams({ page: String(page), page_size: String(page_size) });
+      if (month) params.append('month', month);
+      const response = await this.request(`/api/expenses/paginated?${params.toString()}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.detail || 'Failed to get paginated expenses');
+      return data;
+    } catch (error) {
+      console.error('Paginated expenses error:', error);
+      throw error;
+    }
+  }
+
+  // Expense summary for charts (optionally filter by month: YYYY-MM)
+  async getExpenseSummary(month = null) {
+    await this.checkBackendAvailability();
+
+    if (this.useMockService) {
+      // Build mock summary from mock expenses
+      const mock = await this.mockService.getExpenses();
+      const expenses = mock.expenses || mock || [];
+      const byCat = {};
+      let total = 0; let count = 0;
+      for (const e of expenses) {
+        if (month) {
+          const d = e.expense_date || e.created_at || '';
+          if (!String(d).startsWith(month)) continue;
+        }
+        const cat = e.category || 'Other';
+        byCat[cat] = byCat[cat] || { total: 0, count: 0 };
+        byCat[cat].total += Number(e.amount || 0);
+        byCat[cat].count += 1;
+        total += Number(e.amount || 0);
+        count += 1;
+      }
+      return {
+        total_amount: Number(total.toFixed(2)),
+        total_count: count,
+        categories: Object.entries(byCat).map(([k, v]) => ({ category: k, total_amount: Number(v.total.toFixed(2)), count: v.count }))
+      };
+    }
+
+    try {
+      const qs = month ? `?month=${encodeURIComponent(month)}` : '';
+      const response = await this.request(`/api/expenses/summary${qs}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || 'Failed to get expense summary');
+      }
+      return data;
+    } catch (error) {
+      console.error('Get expense summary error:', error);
       throw error;
     }
   }
@@ -834,3 +961,8 @@ apiService.initializeTokens();
 
 export { apiService };
 export default apiService;
+export const ApiEvents = { on };
+export async function recheckBackend() {
+  await apiService.checkBackendAvailability();
+  return apiService.getStatus();
+}

@@ -280,6 +280,36 @@ Completed previously.
 
 ---
 
+## 📝 How to Resume (Dev Diary)
+
+Date: 2025-08-12
+
+What was finished just now:
+- Added a month picker to the dashboard header to drive server-side month filtering.
+- Switched dashboard expenses to use /api/expenses/paginated with month, including pager UI.
+- Charts now respond to the selected month:
+   - Category Donut uses summary for that month.
+   - Monthly Trend fetches a larger slice for daily spend visualization.
+- Budget summary aligns to the selected period (YYYY-MM) if a matching budget exists.
+
+Next small steps when resuming:
+- Add URL query param sync for selectedMonth to make back/forward navigation stateful.
+- Replace the basic pager with page-size control and go-to-first/last.
+- Wire the budget utilization ring and goal progress charts.
+
+Quick start next session:
+```bash
+# Frontend from repo root
+npm start
+
+# Backend (optional for local API)
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+```
+
+---
+
 ## 🧪 Sample Budget Response (Illustrative)
 ```json
 {

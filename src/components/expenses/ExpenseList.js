@@ -15,6 +15,9 @@ const ExpenseList = ({ refreshTrigger, onEditExpense, searchFilter = '' }) => {
   const [error, setError] = useState('');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
 
   // Load expenses from API
   const loadExpenses = async () => {
@@ -22,15 +25,24 @@ const ExpenseList = ({ refreshTrigger, onEditExpense, searchFilter = '' }) => {
       setLoading(true);
       setError('');
       
-      const response = await apiService.get('/api/expenses');
-      
-      if (response && Array.isArray(response)) {
-        setExpenses(response);
-      } else if (response && response.expenses && Array.isArray(response.expenses)) {
-        setExpenses(response.expenses);
+      // Prefer paginated API, fallback to legacy
+      const paged = await apiService.get(`/api/expenses/paginated?page=${page}&page_size=${pageSize}`);
+      if (paged && Array.isArray(paged.items)) {
+        setExpenses(paged.items);
+        setTotal(paged.total || paged.items.length);
       } else {
-        console.warn('Unexpected response format:', response);
-        setExpenses([]);
+        const legacy = await apiService.get('/api/expenses');
+        if (Array.isArray(legacy)) {
+          setExpenses(legacy);
+          setTotal(legacy.length);
+        } else if (legacy && legacy.expenses && Array.isArray(legacy.expenses)) {
+          setExpenses(legacy.expenses);
+          setTotal(legacy.expenses.length);
+        } else {
+          console.warn('Unexpected response format:', paged || legacy);
+          setExpenses([]);
+          setTotal(0);
+        }
       }
     } catch (error) {
       console.error('Error loading expenses:', error);
@@ -44,7 +56,7 @@ const ExpenseList = ({ refreshTrigger, onEditExpense, searchFilter = '' }) => {
   // Load expenses on mount and when refreshTrigger changes
   useEffect(() => {
     loadExpenses();
-  }, [refreshTrigger]);
+  }, [refreshTrigger, page, pageSize]);
 
   // Filter and sort expenses
   const filteredAndSortedExpenses = expenses
@@ -165,6 +177,9 @@ const ExpenseList = ({ refreshTrigger, onEditExpense, searchFilter = '' }) => {
     maxHeight: '400px',
     overflowY: 'auto'
   };
+  const paginationStyle = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderTop: '1px solid var(--gray-200)', background: 'white' };
+  const pagerBtn = { padding: '6px 10px', borderRadius: 6, border: '1px solid var(--gray-200)', background: 'white', cursor: 'pointer' };
+  const pageInfo = { fontSize: 12, color: 'var(--primary-700)' };
 
   const expenseItemStyle = {
     padding: 'var(--spacing-md) var(--spacing-lg)',
@@ -322,6 +337,18 @@ const ExpenseList = ({ refreshTrigger, onEditExpense, searchFilter = '' }) => {
           ))}
         </div>
       )}
+      <div style={paginationStyle}>
+        <div style={pageInfo}>
+          Page {page} · Showing {filteredAndSortedExpenses.length} of {total}
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button style={pagerBtn} disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Prev</button>
+          <button style={pagerBtn} disabled={(page * pageSize) >= total} onClick={() => setPage(p => p + 1)}>Next</button>
+          <select value={pageSize} onChange={(e) => { setPage(1); setPageSize(parseInt(e.target.value, 10) || 10); }} style={{ ...pagerBtn, padding: '6px' }}>
+            {[10, 20, 50, 100].map(ps => <option key={ps} value={ps}>{ps}/page</option>)}
+          </select>
+        </div>
+      </div>
     </div>
   );
 };

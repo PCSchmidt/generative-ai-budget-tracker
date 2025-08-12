@@ -17,12 +17,16 @@ import AIDashboardScreen from './screens/main/DashboardScreen';
 
 // Import global styles
 import './styles/GlobalStyles.css';
+import GlobalBanner from './components/ui/GlobalBanner';
+import DevModeIndicator from './components/dev/DevModeIndicator';
 
 export default function App() {
   return (
     <AuthProvider>
       <Router>
         <div className="App">
+          <GlobalBanner />
+          <DevModeIndicator />
           <Routes>
             {/* Public routes */}
             <Route path="/" element={<LandingPage />} />

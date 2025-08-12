@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
+## [2025-08-12]
+### Added
+- Dashboard month picker to filter data by selected YYYY-MM.
+- Server-side month filtering for paginated expenses in the dashboard flow.
+- Pager controls (Prev/Next, page indicator, total count) for the Recent Expenses list.
+- Monthly Trend chart now consumes a larger monthly slice for accurate daily visualization.
+- Budget summary card aligns to selected month period.
+
+### Changed
+- Monthly totals card now derives totals/avg from the expense summary API (supports `total_count` or `count`).
+
+### Notes
+- Next: sync selectedMonth to URL query for shareable, navigable state; add page-size selector; add budget/goal charts.
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
 ## [Unreleased]
 - Pending features: charts, persistent DB integration, 401 handler, richer AI categorization UI.
 

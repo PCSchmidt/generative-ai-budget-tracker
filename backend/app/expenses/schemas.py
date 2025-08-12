@@ -39,3 +39,10 @@ class ExpenseSummaryResponse(BaseModel):
     count: int
     categories: List[ExpenseSummaryCategory]
     month: Optional[str] = None
+
+
+class PaginatedExpensesResponse(BaseModel):
+    items: List[ExpenseResponse]
+    total: int
+    page: int
+    page_size: int

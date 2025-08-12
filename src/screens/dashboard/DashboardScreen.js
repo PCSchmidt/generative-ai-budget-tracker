@@ -8,6 +8,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import apiService from '../../services/api';
 import { buildCategoryBreakdown, getCategoryMeta, formatCurrency as fmt, getCategoryIcon } from '../../utils/categories';
+import CategoryDonut from '../../components/charts/CategoryDonut';
+import MonthlyTrend from '../../components/charts/MonthlyTrend';
 
 export default function DashboardScreen() {
   const { user, logout } = useAuth();
@@ -45,6 +47,15 @@ export default function DashboardScreen() {
   // Derived metrics
   const [monthlyTotals, setMonthlyTotals] = useState({ total: 0, avg: 0 });
   const [monthlyBudget, setMonthlyBudget] = useState(null);
+  const [summary, setSummary] = useState(null);
+  // Month selection + paging
+  const now = new Date();
+  const currentYM = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const [selectedMonth, setSelectedMonth] = useState(currentYM);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
+  const [monthlyExpenses, setMonthlyExpenses] = useState([]); // for charts (full month slice)
 
   // Debug: Log auth state
   console.log('DashboardScreen - user:', user);
@@ -60,33 +71,59 @@ export default function DashboardScreen() {
     loadBudgetsAndGoals();
   }, []);
 
+  // Reload when month or page changes
+  useEffect(() => {
+    loadDashboardData();
+    // Update monthly budget selection when month changes
+    // (budgets list is static until CRUD; we recompute below in loadBudgetsAndGoals too)
+    if (budgets?.length) {
+      const mb = budgets.find(b => b.period === selectedMonth) || null;
+      setMonthlyBudget(mb);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMonth, page, pageSize]);
+
   const loadDashboardData = async () => {
     try {
       setLoading(true);
       setError(null);
       
       // Load dashboard data
-      const [expensesData, insightsData] = await Promise.all([
-        apiService.getExpenses().catch(() => ({ expenses: [] })),
-        apiService.getInsights().catch(() => ({ insights: null }))
+      const ym = selectedMonth;
+      const [paginatedData, insightsData, summaryData, monthFullData] = await Promise.all([
+        apiService.getExpensesPaginated({ page, page_size: pageSize, month: ym }).catch(() => ({ items: [], total: 0, page: 1, page_size: pageSize })),
+        apiService.getInsights().catch(() => ({ insights: null })),
+        apiService.getExpenseSummary(ym).catch(() => null),
+        // Fetch a larger slice for the trend chart
+        apiService.getExpensesPaginated({ page: 1, page_size: 500, month: ym }).catch(() => ({ items: [] }))
       ]);
 
-      const expList = expensesData.expenses || expensesData || [];
-      setExpenses(expList);
+      const items = paginatedData.items || [];
+      setExpenses(items);
+      setTotal(paginatedData.total || 0);
+      setPage(paginatedData.page || 1);
+      setPageSize(paginatedData.page_size || pageSize);
       setInsights(insightsData.insights);
 
-      // Compute simple month-to-date stats
+  // Compute simple month stats from summary
       try {
-        const now = new Date();
-        const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-        const mtx = expList.filter(e => (e.expense_date || e.created_at || '').startsWith(ym));
-        const total = mtx.reduce((s, e) => s + Number(e.amount||0), 0);
-        const avg = mtx.length ? total / mtx.length : 0;
-        setMonthlyTotals({ total, avg });
+        if (summaryData) {
+          const totalAmt = Number(summaryData.total_amount || 0);
+          const cnt = Number((summaryData.total_count ?? summaryData.count) || 0);
+          setMonthlyTotals({ total: totalAmt, avg: cnt ? totalAmt / cnt : 0 });
+        } else {
+          setMonthlyTotals({ total: 0, avg: 0 });
+        }
       } catch {}
+
+  // Set summary for charts
+  if (summaryData) setSummary(summaryData);
+
+      // Set monthly expenses for trend chart
+      setMonthlyExpenses(monthFullData.items || []);
       
       // Load ML insights if we have expenses
-      if ((expensesData.expenses || expensesData || []).length > 0) {
+      if ((items || []).length > 0) {
         loadMLInsights();
       }
       
@@ -156,9 +193,7 @@ export default function DashboardScreen() {
       setBudgets(bList);
       setGoals(gList);
       // Set the current month budget if present
-      const now = new Date();
-      const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-      const mb = bList.find(b => b.period === ym) || null;
+      const mb = bList.find(b => b.period === selectedMonth) || null;
       setMonthlyBudget(mb);
     } catch(e){ console.warn('Budget/Goal load failed', e); }
     finally { setLoadingPortfolios(false); }
@@ -309,6 +344,13 @@ export default function DashboardScreen() {
             <p style={styles.subtitle}>Welcome back, {user?.username || 'User'}!</p>
           </div>
           <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => { setSelectedMonth(e.target.value); setPage(1); }}
+              style={styles.monthPicker}
+              aria-label="Select month"
+            />
             <button
               style={{ ...styles.logoutButton, backgroundColor: '#2563eb' }}
               onClick={() => navigate('/ai-dashboard')}
@@ -456,7 +498,7 @@ export default function DashboardScreen() {
 
         {/* Recent Expenses */}
         <section style={styles.expensesSection}>
-          <h2 style={styles.sectionTitle}>Recent Expenses</h2>
+      <h2 style={styles.sectionTitle}>Recent Expenses</h2>
           {error && (
             <div style={styles.errorContainer}>
               <p style={styles.errorText}>{error}</p>
@@ -466,7 +508,7 @@ export default function DashboardScreen() {
             </div>
           )}
           
-          {expenses.length === 0 ? (
+      {expenses.length === 0 ? (
             <div style={styles.emptyState}>
               <p style={styles.emptyStateText}>No expenses yet</p>
               <p style={styles.emptyStateSubtext}>
@@ -481,7 +523,7 @@ export default function DashboardScreen() {
             </div>
           ) : (
             <div style={styles.expensesList}>
-              {expenses.slice(0, 10).map((expense, index) => (
+        {expenses.map((expense, index) => (
                 <div key={expense.id || index} style={styles.expenseItem}>
                   <div style={styles.expenseLeft}>
                     <div style={styles.expenseIcon}>
@@ -532,8 +574,39 @@ export default function DashboardScreen() {
                   </div>
                 </div>
               ))}
+              <div style={styles.pagerRow}>
+                <div style={{color:'#64748b', fontSize:12}}>Total: {total}</div>
+                <div style={{display:'flex', alignItems:'center', gap:8}}>
+                  <button
+                    style={styles.pagerBtn}
+                    onClick={() => setPage(p => Math.max(1, p - 1))}
+                    disabled={page <= 1}
+                  >Prev</button>
+                  <span style={{fontSize:12, color:'#475569'}}>Page {page} of {Math.max(1, Math.ceil(total / pageSize))}</span>
+                  <button
+                    style={styles.pagerBtn}
+                    onClick={() => setPage(p => (p < Math.ceil(total / pageSize) ? p + 1 : p))}
+                    disabled={page >= Math.ceil(total / pageSize)}
+                  >Next</button>
+                </div>
+              </div>
             </div>
           )}
+        </section>
+
+        {/* Visualizations */}
+        <section style={styles.visualsSection}>
+          <h2 style={styles.sectionTitle}>Spending Visualizations</h2>
+          <div style={styles.visualsGrid}>
+            <div style={styles.visualCard}>
+              <h3 style={styles.cardTitle}>By Category</h3>
+              <CategoryDonut summary={summary} />
+            </div>
+            <div style={styles.visualCard}>
+              <h3 style={styles.cardTitle}>Daily Trend (MTD)</h3>
+              <MonthlyTrend expenses={monthlyExpenses} month={selectedMonth} />
+            </div>
+          </div>
         </section>
 
         {/* AI Insights */}
@@ -1181,6 +1254,14 @@ const styles = {
     cursor: 'pointer',
     transition: 'background-color 0.2s',
   },
+  monthPicker: {
+    border: '1px solid #e2e8f0',
+    borderRadius: '6px',
+    padding: '8px 10px',
+    fontSize: '14px',
+    color: '#0f172a',
+    background: '#fff',
+  },
 
   main: {
     maxWidth: '1200px',
@@ -1326,6 +1407,22 @@ const styles = {
     borderRadius: '12px',
     overflow: 'hidden',
   },
+  pagerRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: '12px 16px',
+    background: '#f8fafc',
+  },
+  pagerBtn: {
+    background: '#ffffff',
+    border: '1px solid #cbd5e1',
+    color: '#334155',
+    padding: '6px 10px',
+    borderRadius: '6px',
+    fontSize: '12px',
+    cursor: 'pointer',
+  },
 
   expenseItem: {
     display: 'flex',
@@ -1406,6 +1503,10 @@ const styles = {
   insightsSection: {
     marginBottom: '32px',
   },
+
+  visualsSection: { marginBottom: '32px' },
+  visualsGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '16px' },
+  visualCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px' },
 
   insightCard: {
     backgroundColor: '#eff6ff',

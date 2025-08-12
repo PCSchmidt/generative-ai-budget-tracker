@@ -14,6 +14,7 @@ from .schemas import (
     ExpenseResponse,
     ExpenseSummaryResponse,
     ExpenseSummaryCategory,
+    PaginatedExpensesResponse,
 )
 
 router = APIRouter(prefix="/api/expenses", tags=["expenses"])
@@ -22,6 +23,30 @@ router = APIRouter(prefix="/api/expenses", tags=["expenses"])
 async def list_expenses(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     expenses = db.query(Expense).filter(Expense.user_id == current_user['id']).order_by(Expense.created_at.desc()).all()
     return expenses
+
+@router.get('/paginated', response_model=PaginatedExpensesResponse)
+async def list_expenses_paginated(
+    page: int = 1,
+    page_size: int = 10,
+    month: Optional[str] = None,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    page = max(1, page)
+    page_size = max(1, min(page_size, 100))
+    q = db.query(Expense).filter(Expense.user_id == current_user['id'])
+    if month:
+        if not re.fullmatch(r"\d{4}-\d{2}", month):
+            raise HTTPException(status_code=422, detail="Invalid month format. Use YYYY-MM")
+        q = q.filter(Expense.expense_date.like(f"{month}-%"))
+    total = q.count()
+    items = (
+        q.order_by(Expense.created_at.desc())
+         .offset((page - 1) * page_size)
+         .limit(page_size)
+         .all()
+    )
+    return PaginatedExpensesResponse(items=items, total=total, page=page, page_size=page_size)
 
 @router.get('/summary', response_model=ExpenseSummaryResponse)
 async def expense_summary(
