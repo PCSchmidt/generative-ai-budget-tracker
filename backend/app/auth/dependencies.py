@@ -2,12 +2,12 @@ from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from jose import jwt, ExpiredSignatureError, JWTError
-import os
 from app.database import get_db
+from app.core.config import SECRET_KEY
 from app.auth.models import User
 
 security = HTTPBearer(auto_error=False)
-SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-prod")
+SECRET_KEY = SECRET_KEY
 
 
 def get_current_user(credentials: HTTPAuthorizationCredentials | None = Depends(security), db: Session = Depends(get_db)):

@@ -1,15 +1,17 @@
 from datetime import datetime, timedelta, timezone
 from typing import Optional
-import os, secrets, hashlib, bcrypt
+import secrets, hashlib, bcrypt
 from jose import jwt
 from sqlalchemy.orm import Session
 from app.auth.models import RefreshToken
+from app.core.config import (
+    SECRET_KEY,
+    ACCESS_TOKEN_EXPIRE_MINUTES,
+    REFRESH_TOKEN_EXPIRE_DAYS,
+    BCRYPT_ROUNDS,
+)
 
-SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-prod")
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
-REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
-BCRYPT_ROUNDS = int(os.getenv("BCRYPT_ROUNDS", "12"))
-
+import os
 if os.getenv("TESTING") == "1":
     BCRYPT_ROUNDS = min(BCRYPT_ROUNDS, 4)
 

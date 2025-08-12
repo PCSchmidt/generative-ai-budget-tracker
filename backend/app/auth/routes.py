@@ -17,7 +17,7 @@ from .schemas import (
 )
 
 security = HTTPBearer(auto_error=False)
-SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-prod")
+from app.core.config import SECRET_KEY
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
