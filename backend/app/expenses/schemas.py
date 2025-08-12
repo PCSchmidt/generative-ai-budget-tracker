@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from typing import Optional
+from typing import Optional, List
 from pydantic import BaseModel, ConfigDict
 
 class ExpenseCreate(BaseModel):
@@ -26,3 +26,16 @@ class ExpenseResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ExpenseSummaryCategory(BaseModel):
+    category: str
+    total_amount: float
+    count: int
+
+
+class ExpenseSummaryResponse(BaseModel):
+    total_amount: float
+    count: int
+    categories: List[ExpenseSummaryCategory]
+    month: Optional[str] = None

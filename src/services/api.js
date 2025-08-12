@@ -17,13 +17,14 @@ class ApiService {
     this.refreshToken = null; // optional, backend may not provide
     this.mockService = new MockApiService();
     this.useMockService = false; // Force use of real backend for development
-    this.backendChecked = false;
+  this.backendChecked = false;
     
     // For development: force backend usage
     if (process.env.NODE_ENV === 'development') {
-      console.log('🔧 Development mode: Forcing backend connection to', this.baseURL);
+      console.log('🔧 Development mode: preferring backend if available at', this.baseURL);
+      // Do not mark backendChecked here; let checkBackendAvailability decide.
       this.useMockService = false;
-      this.backendChecked = true;
+      this.backendChecked = false;
     }
   }
 
@@ -193,7 +194,11 @@ class ApiService {
     await this.checkBackendAvailability();
     
     if (this.useMockService) {
-      return await this.mockService.signup(userData);
+  const data = await this.mockService.signup(userData);
+  // Persist tokens and user locally for session restoration
+  await this.storeTokens(data.access_token, data.refresh_token ?? null);
+  localStorage.setItem('user', JSON.stringify(data.user));
+  return data;
     }
 
     try {
@@ -222,7 +227,11 @@ class ApiService {
     await this.checkBackendAvailability();
     
     if (this.useMockService) {
-      return await this.mockService.login(email, password);
+  const data = await this.mockService.login(email, password);
+  // Persist tokens and user locally for session restoration
+  await this.storeTokens(data.access_token, data.refresh_token ?? null);
+  localStorage.setItem('user', JSON.stringify(data.user));
+  return data;
     }
     try {
       const response = await this.request('/auth/login', {

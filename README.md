@@ -160,15 +160,14 @@ Planned Test Improvements:
    cd generative-ai-budget-tracker
    ```
 
-2. **Install frontend dependencies**
+2. **Install frontend dependencies (canonical web app at root)**
    ```bash
    npm install
    ```
 
-3. **Start the development server**
+3. **Start the development servers**
    ```bash
-   # For frontend development (React web app)
-   cd frontend
+   # Frontend (React web app) - from repo root
    npm start
    
    # For backend development (FastAPI)
@@ -190,11 +189,11 @@ Planned Test Improvements:
 - **Login**: Test the working password visibility toggles
 - **Navigation**: Experience the protected route system
 
-## 📁 Project Structure
+## 📁 Project Structure (canonical locations)
 
 ```
 generative-ai-budget-tracker/
-├── 🎯 src/                     # React application source
+├── 🎯 src/                     # React application source (canonical web app)
 │   ├── components/
 │   │   ├── auth/              # ✅ ProtectedRoute component
 │   │   └── ui/                # ✅ Professional UI components
@@ -219,7 +218,12 @@ generative-ai-budget-tracker/
 │   └── requirements.txt       # ✅ Dependencies defined
 ├── 🐳 Docker/                 # Containerization ready
 ├── 📚 docs/                   # Comprehensive documentation
+│   └── frontend-reorg.md     # Notes on consolidating multiple frontends into root src/
 └── 🚀 .github/                # Deployment configs
+
+Archived (for reference):
+- `archive/frontend-legacy-2025-08-12/` (was `frontend/`)
+- `docs/prototypes/web-frontend/` (was `web-frontend/`)
 ```
 
 ## 🔑 Key Achievements

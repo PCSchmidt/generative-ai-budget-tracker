@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import apiService from '../../services/api';
-import { buildCategoryBreakdown, getCategoryMeta, formatCurrency as fmt } from '../../utils/categories';
+import { buildCategoryBreakdown, getCategoryMeta, formatCurrency as fmt, getCategoryIcon } from '../../utils/categories';
 
 export default function DashboardScreen() {
   const { user, logout } = useAuth();
@@ -42,6 +42,9 @@ export default function DashboardScreen() {
   const [editingBudget, setEditingBudget] = useState(null);
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [editingGoal, setEditingGoal] = useState(null);
+  // Derived metrics
+  const [monthlyTotals, setMonthlyTotals] = useState({ total: 0, avg: 0 });
+  const [monthlyBudget, setMonthlyBudget] = useState(null);
 
   // Debug: Log auth state
   console.log('DashboardScreen - user:', user);
@@ -68,8 +71,19 @@ export default function DashboardScreen() {
         apiService.getInsights().catch(() => ({ insights: null }))
       ]);
 
-      setExpenses(expensesData.expenses || expensesData || []);
+      const expList = expensesData.expenses || expensesData || [];
+      setExpenses(expList);
       setInsights(insightsData.insights);
+
+      // Compute simple month-to-date stats
+      try {
+        const now = new Date();
+        const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+        const mtx = expList.filter(e => (e.expense_date || e.created_at || '').startsWith(ym));
+        const total = mtx.reduce((s, e) => s + Number(e.amount||0), 0);
+        const avg = mtx.length ? total / mtx.length : 0;
+        setMonthlyTotals({ total, avg });
+      } catch {}
       
       // Load ML insights if we have expenses
       if ((expensesData.expenses || expensesData || []).length > 0) {
@@ -134,17 +148,36 @@ export default function DashboardScreen() {
     try {
       setLoadingPortfolios(true);
       const [bRes, gRes] = await Promise.all([
-        apiService.getBudgets().catch(()=>[]),
-        apiService.getGoals().catch(()=>[])
+        apiService.getBudgets().catch(()=>({ budgets: [] })),
+        apiService.getGoals().catch(()=>({ goals: [] }))
       ]);
-      setBudgets(bRes.budgets || bRes || []);
-      setGoals(gRes.goals || gRes || []);
+      const bList = bRes.budgets || bRes || [];
+      const gList = gRes.goals || gRes || [];
+      setBudgets(bList);
+      setGoals(gList);
+      // Set the current month budget if present
+      const now = new Date();
+      const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+      const mb = bList.find(b => b.period === ym) || null;
+      setMonthlyBudget(mb);
     } catch(e){ console.warn('Budget/Goal load failed', e); }
     finally { setLoadingPortfolios(false); }
   };
 
   const formatCurrency = (amount) => {
     return `$${Number(amount || 0).toFixed(2)}`;
+  };
+
+  // Simple date formatter for expense rows
+  const formatDate = (value) => {
+    if (!value) return '';
+    try {
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return String(value);
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } catch {
+      return String(value);
+    }
   };
 
   const handleLogout = () => {

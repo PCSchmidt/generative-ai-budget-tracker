@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { PasswordField } from '../../components/ui/PasswordField';
 
 const SignupScreen = () => {
   const [formData, setFormData] = useState({
@@ -8,8 +9,7 @@ const SignupScreen = () => {
     password: '',
     confirmPassword: ''
   });
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  // Visibility handled internally by PasswordField
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -170,141 +170,30 @@ const SignupScreen = () => {
           </div>
 
           <div style={{ marginBottom: '24px' }}>
-            <label style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: '600',
-              color: '#374151',
-              marginBottom: '8px'
-            }}>
-              Password
-            </label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showPassword ? "text" : "password"}
-                name="password"
-                value={formData.password}
-                onChange={handleInputChange}
-                required
-                style={{
-                  width: '100%',
-                  padding: '12px 50px 12px 16px',
-                  border: '2px solid #e2e8f0',
-                  borderRadius: '8px',
-                  fontSize: '16px',
-                  boxSizing: 'border-box',
-                  backgroundColor: '#ffffff',
-                  transition: 'border-color 0.2s ease',
-                  outline: 'none'
-                }}
-                placeholder="Create a secure password"
-                onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
-                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'rgba(59, 130, 246, 0.1)',
-                  border: '1px solid rgba(59, 130, 246, 0.3)',
-                  cursor: 'pointer',
-                  color: 'rgb(59, 130, 246)',
-                  fontSize: '18px',
-                  padding: '8px',
-                  borderRadius: '6px',
-                  zIndex: 1000,
-                  width: '36px',
-                  height: '36px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(59, 130, 246, 0.2)';
-                  e.target.style.borderColor = 'rgb(59, 130, 246)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'rgba(59, 130, 246, 0.1)';
-                  e.target.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-                }}
-              >
-                {showPassword ? '👁️' : '🙈'}
-              </button>
-            </div>
+            <PasswordField
+              name="password"
+              label="Password"
+              value={formData.password}
+              onChange={handleInputChange}
+              required
+              placeholder="Create a secure password"
+              helperText={formData.password.length < 6 && formData.password ? 'Minimum 6 characters' : 'Use at least 6 characters.'}
+              error={error && !formData.password ? 'Password is required' : undefined}
+            />
           </div>
 
           <div style={{ marginBottom: '32px' }}>
-            <label style={{
-              display: 'block',
-              fontSize: '14px',
-              fontWeight: '600',
-              color: '#374151',
-              marginBottom: '8px'
-            }}>
-              Confirm Password
-            </label>
-            <div style={{ position: 'relative' }}>
-              <input
-                type={showConfirmPassword ? "text" : "password"}
-                name="confirmPassword"
-                value={formData.confirmPassword}
-                onChange={handleInputChange}
-                required
-                style={{
-                  width: '100%',
-                  padding: '12px 50px 12px 16px',
-                  border: '2px solid #e2e8f0',
-                  borderRadius: '8px',
-                  fontSize: '16px',
-                  boxSizing: 'border-box',
-                  backgroundColor: '#ffffff',
-                  transition: 'border-color 0.2s ease',
-                  outline: 'none'
-                }}
-                placeholder="Confirm your password"
-                onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
-                onBlur={(e) => e.target.style.borderColor = '#e2e8f0'}
-              />
-              <button
-                type="button"
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                style={{
-                  position: 'absolute',
-                  right: '12px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'rgba(59, 130, 246, 0.1)',
-                  border: '1px solid rgba(59, 130, 246, 0.3)',
-                  cursor: 'pointer',
-                  color: 'rgb(59, 130, 246)',
-                  fontSize: '18px',
-                  padding: '8px',
-                  borderRadius: '6px',
-                  zIndex: 1000,
-                  width: '36px',
-                  height: '36px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.2s ease'
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.background = 'rgba(59, 130, 246, 0.2)';
-                  e.target.style.borderColor = 'rgb(59, 130, 246)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.background = 'rgba(59, 130, 246, 0.1)';
-                  e.target.style.borderColor = 'rgba(59, 130, 246, 0.3)';
-                }}
-              >
-                {showConfirmPassword ? '👁️' : '🙈'}
-              </button>
-            </div>
+            <PasswordField
+              name="confirmPassword"
+              label="Confirm Password"
+              value={formData.confirmPassword}
+              onChange={handleInputChange}
+              required
+              placeholder="Confirm your password"
+              helperText={formData.confirmPassword && formData.confirmPassword !== formData.password ? 'Passwords do not match' : 'Re-enter your password.'}
+              error={formData.confirmPassword && formData.confirmPassword !== formData.password ? 'Passwords do not match' : undefined}
+              confirm
+            />
           </div>
 
           {error && (

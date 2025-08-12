@@ -1,13 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException
-from typing import List
+from typing import List, Optional
 from sqlalchemy.orm import Session
 from datetime import date
 from sqlalchemy import func  # added
+import re
 
 from app.database import get_db
 from app.auth.models import Expense, Budget  # added Budget
 from app.auth.dependencies import get_current_user
-from .schemas import ExpenseCreate, ExpenseUpdate, ExpenseResponse
+from .schemas import (
+    ExpenseCreate,
+    ExpenseUpdate,
+    ExpenseResponse,
+    ExpenseSummaryResponse,
+    ExpenseSummaryCategory,
+)
 
 router = APIRouter(prefix="/api/expenses", tags=["expenses"])
 
@@ -15,6 +22,42 @@ router = APIRouter(prefix="/api/expenses", tags=["expenses"])
 async def list_expenses(current_user=Depends(get_current_user), db: Session = Depends(get_db)):
     expenses = db.query(Expense).filter(Expense.user_id == current_user['id']).order_by(Expense.created_at.desc()).all()
     return expenses
+
+@router.get('/summary', response_model=ExpenseSummaryResponse)
+async def expense_summary(
+    month: Optional[str] = None,
+    current_user=Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    q = db.query(Expense).filter(Expense.user_id == current_user['id'])
+    if month:
+        if not re.fullmatch(r"\d{4}-\d{2}", month):
+            raise HTTPException(status_code=422, detail="Invalid month format. Use YYYY-MM")
+        q = q.filter(Expense.expense_date.like(f"{month}-%"))
+
+    expenses = q.all()
+    total_amount = float(sum((e.amount or 0) for e in expenses))
+    count = len(expenses)
+
+    cat_map = {}
+    for e in expenses:
+        key = e.category or 'Other'
+        if key not in cat_map:
+            cat_map[key] = {'total': 0.0, 'count': 0}
+        cat_map[key]['total'] += float(e.amount or 0)
+        cat_map[key]['count'] += 1
+
+    categories = [
+        ExpenseSummaryCategory(category=k, total_amount=round(v['total'], 2), count=v['count'])
+        for k, v in sorted(cat_map.items())
+    ]
+
+    return ExpenseSummaryResponse(
+        total_amount=round(total_amount, 2),
+        count=count,
+        categories=categories,
+        month=month
+    )
 
 # helper to recalc a budget's spent_amount for a given user & period (YYYY-MM)
 def _recalc_budget(db: Session, user_id: int, period: str):
