@@ -23,8 +23,8 @@ def upgrade() -> None:
         sa.Column('hashed_password', sa.String(length=255), nullable=False),
         sa.Column('first_name', sa.String(length=100), nullable=True),
         sa.Column('last_name', sa.String(length=100), nullable=True),
-        sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('1')),
-        sa.Column('is_verified', sa.Boolean(), nullable=False, server_default=sa.text('0')),
+    sa.Column('is_active', sa.Boolean(), nullable=False, server_default=sa.text('true')),
+    sa.Column('is_verified', sa.Boolean(), nullable=False, server_default=sa.text('false')),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
     )

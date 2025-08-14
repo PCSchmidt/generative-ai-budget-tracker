@@ -24,7 +24,7 @@ def upgrade() -> None:
         sa.Column('token_hash', sa.String(length=128), nullable=False, index=True),  # single-column index auto-created
         sa.Column('expires_at', sa.DateTime(timezone=True), nullable=False, index=True),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column('revoked', sa.Boolean(), nullable=False, server_default=sa.text('0'), index=True),
+    sa.Column('revoked', sa.Boolean(), nullable=False, server_default=sa.text('false'), index=True),
         sa.Column('replaced_by', sa.Integer(), nullable=True),
     )
     # Composite covering index for validity queries
