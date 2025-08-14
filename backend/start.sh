@@ -26,8 +26,9 @@ if command -v alembic >/dev/null 2>&1; then
   echo "🗃️ Running Alembic migrations (with retry until DB is ready)..."
   set +e  # temporarily disable exit-on-error for retry loop
   ATTEMPTS=0
-  MAX_ATTEMPTS=${ALEMBIC_MAX_ATTEMPTS:-20}
-  SLEEP_SECONDS=${ALEMBIC_RETRY_SLEEP:-3}
+  # Allow up to ~5 minutes by default (60 * 5s)
+  MAX_ATTEMPTS=${ALEMBIC_MAX_ATTEMPTS:-60}
+  SLEEP_SECONDS=${ALEMBIC_RETRY_SLEEP:-5}
   while true; do
     ATTEMPTS=$((ATTEMPTS+1))
     alembic upgrade head
