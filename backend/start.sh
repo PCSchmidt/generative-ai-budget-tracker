@@ -15,6 +15,37 @@ else
   export PYTHONPATH="${PYTHONPATH}:$(pwd)"
 fi
 
+# Optional: wait for Postgres TCP port to accept connections
+if [[ -n "${DATABASE_URL:-}" ]]; then
+  echo "🔎 Parsing DATABASE_URL to determine DB host:port..."
+  HOSTPORT=$(python - <<'PY'
+import os, re
+u=os.environ.get('DATABASE_URL','')
+m=re.match(r"^[a-zA-Z0-9_+.-]+://[^:@]+:[^@]+@([^/:]+)(?::(\d+))?/", u)
+host = 'postgres.railway.internal'
+port = '5432'
+if m:
+    host = m.group(1) or host
+    port = m.group(2) or port
+print(f"{host}:{port}")
+PY
+)
+  DB_HOST="${HOSTPORT%:*}"
+  DB_PORT="${HOSTPORT#*:}"
+  echo "⏱️  Waiting for Postgres at ${DB_HOST}:${DB_PORT} to accept connections..."
+  ATT=0; MAX_ATT=${DB_TCP_MAX_ATTEMPTS:-60}; SLEEP_S=${DB_TCP_RETRY_SLEEP:-5}
+  while ! (echo > "/dev/tcp/${DB_HOST}/${DB_PORT}") 2>/dev/null; do
+    ATT=$((ATT+1))
+    if [[ $ATT -ge $MAX_ATT ]]; then
+      echo "❌ Postgres not reachable at ${DB_HOST}:${DB_PORT} after ${ATT} attempts; exiting." >&2
+      exit 1
+    fi
+    echo "⏳ Postgres not ready (attempt ${ATT}/${MAX_ATT}); retrying in ${SLEEP_S}s..."
+    sleep "$SLEEP_S"
+  done
+  echo "✅ Postgres is reachable. Proceeding with migrations."
+fi
+
 # Ensure SECRET_KEY is not default
 if [[ "${SECRET_KEY:-your-secret-key-change-in-production}" == "your-secret-key-change-in-production" ]]; then
   echo "❌ SECRET_KEY is default or unset. Set SECRET_KEY env var before starting." >&2
