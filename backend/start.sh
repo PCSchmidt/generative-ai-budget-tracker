@@ -7,8 +7,13 @@ echo "🚀 Starting AI Budget Tracker Backend..."
 echo "📂 Current directory: $(pwd)"
 echo "🐍 Python version: $(python --version)"
 
-# Add current directory to Python path
-export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+# Add current directory to Python path (handle unset PYTHONPATH safely)
+# If PYTHONPATH is unset, don't reference it directly when -u is enabled
+if [[ -z "${PYTHONPATH+x}" ]]; then
+  export PYTHONPATH="$(pwd)"
+else
+  export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+fi
 
 # Ensure SECRET_KEY is not default
 if [[ "${SECRET_KEY:-your-secret-key-change-in-production}" == "your-secret-key-change-in-production" ]]; then
@@ -18,8 +23,28 @@ fi
 
 # Run database migrations (fail fast if unavailable)
 if command -v alembic >/dev/null 2>&1; then
-  echo "🗃️ Running Alembic migrations..."
-  alembic upgrade head || { echo "❌ Alembic migration failed"; exit 1; }
+  echo "🗃️ Running Alembic migrations (with retry until DB is ready)..."
+  set +e  # temporarily disable exit-on-error for retry loop
+  ATTEMPTS=0
+  MAX_ATTEMPTS=${ALEMBIC_MAX_ATTEMPTS:-20}
+  SLEEP_SECONDS=${ALEMBIC_RETRY_SLEEP:-3}
+  while true; do
+    ATTEMPTS=$((ATTEMPTS+1))
+    alembic upgrade head
+    STATUS=$?
+    if [[ $STATUS -eq 0 ]]; then
+      echo "✅ Alembic migrations applied."
+      break
+    fi
+    if [[ $ATTEMPTS -ge $MAX_ATTEMPTS ]]; then
+      echo "❌ Alembic migration failed after ${ATTEMPTS} attempts; giving up." >&2
+      set -e
+      exit 1
+    fi
+    echo "⏳ Alembic attempt ${ATTEMPTS} failed (status=${STATUS}); DB might not be ready. Retrying in ${SLEEP_SECONDS}s..."
+    sleep "$SLEEP_SECONDS"
+  done
+  set -e
   REV=$(alembic current 2>/dev/null | awk '{print $1}')
   echo "✅ DB at migration revision: ${REV}" || true
 else
