@@ -19,6 +19,7 @@ import AIDashboardScreen from './screens/main/DashboardScreen';
 import './styles/GlobalStyles.css';
 import GlobalBanner from './components/ui/GlobalBanner';
 import DevModeIndicator from './components/dev/DevModeIndicator';
+import ProdApiStatus from './components/ui/ProdApiStatus';
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
         <div className="App">
           <GlobalBanner />
           <DevModeIndicator />
+          <ProdApiStatus />
           <Routes>
             {/* Public routes */}
             <Route path="/" element={<LandingPage />} />
