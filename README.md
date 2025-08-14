@@ -1,5 +1,28 @@
 # 🤖 AI Budget Tracker - Smart Money Management
 
+## 🚀 Deploy (Vercel + Railway)
+
+This frontend is designed to run on Vercel and point at a FastAPI backend on Railway.
+
+### Backend (Railway)
+- Expose `/health` returning HTTP 200.
+- Set env vars: `DATABASE_URL`, `JWT_SECRET_KEY`, and any provider keys.
+- Configure CORS to allow your Vercel domain(s), e.g. `https://<project>.vercel.app`.
+
+### Frontend (Vercel)
+- Environment Variables (Production):
+   - `REACT_APP_API_BASE_URL=https://<your-railway-app>.up.railway.app`
+- Build Command: `npm run build`
+- Output Directory: `build`
+- Auto-deploy `main` branch.
+
+### Smoke test
+1) Visit Vercel URL → Signup/Login
+2) Go to `/expenses` → Add an expense
+3) Open `/dashboard` → Confirm totals and charts update
+
+Notes
+- In production, the app never falls back to the mock API; failures indicate backend issues.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub stars](https://img.shields.io/github/stars/PCSchmidt/generative-ai-budget-tracker.svg)](https://github.com/PCSchmidt/generative-ai-budget-tracker/stargazers)
 [![React](https://img.shields.io/badge/React-18.2.0-blue.svg)](https://reactjs.org/)

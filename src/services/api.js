@@ -19,10 +19,16 @@ function emit(event, payload) {
   });
 }
 
-// API Configuration
-const API_BASE_URL = process.env.NODE_ENV === 'development' 
-  ? 'http://localhost:8000'  // Local development
-  : 'https://generative-ai-budget-tracker-production.up.railway.app'; // Railway production
+// API Configuration (allow override via CRA env var)
+const API_BASE_URL = (
+  process.env.REACT_APP_API_BASE_URL?.trim() ||
+  (process.env.NODE_ENV === 'development'
+    ? 'http://localhost:8000'  // Local development default
+    : 'https://generative-ai-budget-tracker-production.up.railway.app' // Railway production default
+  )
+);
+// Optional demo flag: allow mock fallback even in production (for frontend-only demo)
+const ALLOW_PROD_MOCK = String(process.env.REACT_APP_ALLOW_MOCK_PROD || '').toLowerCase() === 'true';
 
 class ApiService {
   constructor() {
@@ -55,8 +61,9 @@ class ApiService {
 
   // Check if backend is available
   async checkBackendAvailability() {
-    // In development, always try the backend first
-    if (process.env.NODE_ENV === 'development') {
+    const isDev = process.env.NODE_ENV === 'development';
+    // In development, allow falling back to mock to keep UX smooth
+    if (isDev) {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout for dev
@@ -95,35 +102,36 @@ class ApiService {
       }
     }
     
-    // Original logic for production
-    if (this.backendChecked) return !this.useMockService;
+  // Production: by default never fall back to mock; optional demo flag can allow fallback
+  if (this.backendChecked) return !this.useMockService;
     
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 3000); // 3 second timeout
       
-      const response = await fetch(`${this.baseURL}/health`, {
+  const response = await fetch(`${this.baseURL}/health`, {
         method: 'GET',
         signal: controller.signal
       });
       
       clearTimeout(timeoutId);
-  this.useMockService = !response.ok;
+  // In production, do not switch to mock unless explicitly allowed for demo
+  this.useMockService = !response.ok && ALLOW_PROD_MOCK;
   this.backendChecked = true;
       
-  if (this.useMockService) {
-        console.log('🚧 Backend not available, using mock service for development');
+      if (!response.ok) {
+        console.warn('⚠️ Backend health check failed in production:', response.status, 'mockAllowed:', ALLOW_PROD_MOCK);
       } else {
         console.log('✅ Backend is available');
       }
   emit('backend_status', this.getStatus());
       return !this.useMockService;
     } catch (error) {
-      console.log('🚧 Backend not available, using mock service for development');
-      this.useMockService = true;
+      console.error('❌ Backend health check error in production:', error.message, 'mockAllowed:', ALLOW_PROD_MOCK);
+      this.useMockService = !!ALLOW_PROD_MOCK;
       this.backendChecked = true;
-  emit('backend_status', this.getStatus());
-      return false;
+      emit('backend_status', this.getStatus());
+      return !this.useMockService;
     }
   }
 
@@ -559,21 +567,8 @@ class ApiService {
 
   // AI Insights endpoints (ready for future implementation)
   async getInsights() {
-    try {
-      const response = await this.request('/insights');
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.detail || 'Failed to get insights');
-      }
-
-      return { success: true, insights: data };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message || 'Failed to get insights',
-      };
-    }
+  // Delegate to the canonical spending insights endpoint
+  return await this.getSpendingInsights();
   }
 
   // ======= NEW ML-POWERED ENDPOINTS =======
@@ -898,24 +893,39 @@ class ApiService {
   // NEW: Budgets API
   async getBudgets() {
     await this.checkBackendAvailability();
+    if (this.useMockService) {
+      return await this.mockService.getBudgets();
+    }
     const response = await this.request('/api/budgets');
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Failed to load budgets');
     return data; // Expect { budgets: [...] } or list
   }
   async createBudget(payload) {
+    await this.checkBackendAvailability();
+    if (this.useMockService) {
+      return await this.mockService.createBudget(payload);
+    }
     const response = await this.request('/api/budgets', { method: 'POST', body: JSON.stringify(payload) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Failed to create budget');
     return data;
   }
   async updateBudget(id, payload) {
+    await this.checkBackendAvailability();
+    if (this.useMockService) {
+      return await this.mockService.updateBudget(id, payload);
+    }
     const response = await this.request(`/api/budgets/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Failed to update budget');
     return data;
   }
   async deleteBudget(id) {
+    await this.checkBackendAvailability();
+    if (this.useMockService) {
+      return await this.mockService.deleteBudget(id);
+    }
     const response = await this.request(`/api/budgets/${id}`, { method: 'DELETE' });
     if (!response.ok) { try { const d = await response.json(); throw new Error(d.detail||'Failed to delete budget'); } catch { throw new Error('Failed to delete budget'); } }
     return { success: true };
@@ -923,29 +933,48 @@ class ApiService {
   // NEW: Goals API
   async getGoals() {
     await this.checkBackendAvailability();
+    if (this.useMockService) {
+      return await this.mockService.getGoals();
+    }
     const response = await this.request('/api/goals');
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Failed to load goals');
     return data;
   }
   async createGoal(payload) {
+    await this.checkBackendAvailability();
+    if (this.useMockService) {
+      return await this.mockService.createGoal(payload);
+    }
     const response = await this.request('/api/goals', { method: 'POST', body: JSON.stringify(payload) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Failed to create goal');
     return data;
   }
   async updateGoal(id, payload) {
+    await this.checkBackendAvailability();
+    if (this.useMockService) {
+      return await this.mockService.updateGoal(id, payload);
+    }
     const response = await this.request(`/api/goals/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Failed to update goal');
     return data;
   }
   async deleteGoal(id) {
+    await this.checkBackendAvailability();
+    if (this.useMockService) {
+      return await this.mockService.deleteGoal(id);
+    }
     const response = await this.request(`/api/goals/${id}`, { method: 'DELETE' });
     if (!response.ok) { try { const d = await response.json(); throw new Error(d.detail||'Failed to delete goal'); } catch { throw new Error('Failed to delete goal'); } }
     return { success: true };
   }
   async contributeGoal(id, amount) {
+    await this.checkBackendAvailability();
+    if (this.useMockService) {
+      return await this.mockService.contributeGoal(id, amount);
+    }
     const response = await this.request(`/api/goals/${id}/contribute`, { method: 'POST', body: JSON.stringify({ amount }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || 'Failed to contribute');

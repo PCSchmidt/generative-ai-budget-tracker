@@ -161,6 +161,9 @@ DEPLOYMENT_READY.md
 dashboard_v*.html
 mobile-dashboard.html
 
+# Exceptions needed for production deploys
+!backend/requirements-light.txt
+
 # Duplicate frontend directories (we use /frontend/)
 web-frontend/
 src/navigation/
@@ -184,3 +187,5 @@ vercel.json
 # analytics_engine.py (Removed - needed for Phase 3)
 setup_database.py
 validate_system.py
+
+.vercel

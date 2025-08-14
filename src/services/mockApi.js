@@ -48,6 +48,14 @@ class MockApiService {
         created_at: '2025-01-28T12:00:00Z'
       }
     ];
+
+    // Mock Budgets and Goals storage
+    this.budgets = [
+      // Example: { id: 1, user_id: 1, period: '2025-08', total_limit: 1500, notes: '' }
+    ];
+    this.goals = [
+      // Example: { id: 1, user_id: 1, name: 'Emergency Fund', target_amount: 5000, current_amount: 1200 }
+    ];
   }
 
   // Simulate API delay
@@ -202,6 +210,99 @@ class MockApiService {
 
     this.expenses.splice(expenseIndex, 1);
     return { message: 'Expense deleted successfully' };
+  }
+
+  // ---------- Budgets (Mock) ----------
+  async getBudgets(userId = 1) {
+    await this.delay(300);
+    // Derive spent_amount per budget period from expenses
+    const withAgg = this.budgets
+      .filter(b => b.user_id === userId)
+      .map(b => {
+        const spent = this.expenses
+          .filter(e => e.user_id === userId && String(e.expense_date || e.created_at || '').startsWith(b.period))
+          .reduce((s, e) => s + Number(e.amount || 0), 0);
+        const utilization = b.total_limit ? spent / b.total_limit : 0;
+        return { ...b, spent_amount: Number(spent.toFixed(2)), utilization };
+      });
+    return { budgets: withAgg };
+  }
+
+  async createBudget(data, userId = 1) {
+    await this.delay(300);
+    const exists = this.budgets.find(b => b.user_id === userId && b.period === data.period);
+    if (exists) throw new Error('Budget for this period already exists');
+    const newB = {
+      id: this.budgets.length + 1,
+      user_id: userId,
+      period: data.period,
+      total_limit: Number(data.total_limit || 0),
+      notes: data.notes || ''
+    };
+    this.budgets.push(newB);
+    return newB;
+  }
+
+  async updateBudget(id, data, userId = 1) {
+    await this.delay(300);
+    const idx = this.budgets.findIndex(b => b.id === id && b.user_id === userId);
+    if (idx === -1) throw new Error('Budget not found');
+    this.budgets[idx] = { ...this.budgets[idx], ...data, total_limit: Number(data.total_limit ?? this.budgets[idx].total_limit) };
+    return this.budgets[idx];
+  }
+
+  async deleteBudget(id, userId = 1) {
+    await this.delay(200);
+    const idx = this.budgets.findIndex(b => b.id === id && b.user_id === userId);
+    if (idx === -1) throw new Error('Budget not found');
+    this.budgets.splice(idx, 1);
+    return { success: true };
+  }
+
+  // ---------- Goals (Mock) ----------
+  async getGoals(userId = 1) {
+    await this.delay(300);
+    return { goals: this.goals.filter(g => g.user_id === userId) };
+  }
+
+  async createGoal(data, userId = 1) {
+    await this.delay(300);
+    const newG = {
+      id: this.goals.length + 1,
+      user_id: userId,
+      name: data.name,
+      target_amount: Number(data.target_amount || 0),
+      current_amount: Number(data.current_amount || 0),
+      target_date: data.target_date || null,
+      notes: data.notes || ''
+    };
+    this.goals.push(newG);
+    return newG;
+  }
+
+  async updateGoal(id, data, userId = 1) {
+    await this.delay(300);
+    const idx = this.goals.findIndex(g => g.id === id && g.user_id === userId);
+    if (idx === -1) throw new Error('Goal not found');
+    this.goals[idx] = { ...this.goals[idx], ...data, target_amount: Number(data.target_amount ?? this.goals[idx].target_amount), current_amount: Number(data.current_amount ?? this.goals[idx].current_amount) };
+    return this.goals[idx];
+  }
+
+  async deleteGoal(id, userId = 1) {
+    await this.delay(200);
+    const idx = this.goals.findIndex(g => g.id === id && g.user_id === userId);
+    if (idx === -1) throw new Error('Goal not found');
+    this.goals.splice(idx, 1);
+    return { success: true };
+  }
+
+  async contributeGoal(id, amount, userId = 1) {
+    await this.delay(200);
+    const idx = this.goals.findIndex(g => g.id === id && g.user_id === userId);
+    if (idx === -1) throw new Error('Goal not found');
+    const goal = this.goals[idx];
+    goal.current_amount = Math.min(goal.target_amount, Number(goal.current_amount || 0) + Number(amount || 0));
+    return { ...goal, progress_percent: goal.target_amount ? (goal.current_amount / goal.target_amount) * 100 : 0 };
   }
 
   // AI-powered expense categorization (mock)

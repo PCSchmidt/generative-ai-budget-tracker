@@ -220,13 +220,38 @@ async def request_id_middleware(request: Request, call_next):
             response.headers["X-Request-ID"] = req_id
 
 # CORS middleware for frontend integration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Configurable CORS for frontend integration (supports comma-separated list)
+_default_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://localhost:3000",
+]
+_env_origins = os.getenv("FRONTEND_ORIGINS", "").strip()
+_origin_regex = os.getenv("FRONTEND_ORIGIN_REGEX", "").strip()
+if _env_origins:
+    try:
+        allow_origins = [o.strip() for o in _env_origins.split(",") if o.strip()]
+    except Exception:
+        allow_origins = _default_origins
+else:
+    allow_origins = _default_origins
+
+if _origin_regex:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=_origin_regex,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allow_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Security
 security = HTTPBearer(auto_error=False)

@@ -80,7 +80,6 @@ export default function DashboardScreen() {
       const mb = budgets.find(b => b.period === selectedMonth) || null;
       setMonthlyBudget(mb);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth, page, pageSize]);
 
   const loadDashboardData = async () => {
@@ -351,6 +350,13 @@ export default function DashboardScreen() {
               style={styles.monthPicker}
               aria-label="Select month"
             />
+            <button
+              style={{ ...styles.logoutButton, backgroundColor: '#334155' }}
+              onClick={() => navigate('/expenses')}
+              title="Go to Expenses"
+            >
+              Expenses
+            </button>
             <button
               style={{ ...styles.logoutButton, backgroundColor: '#2563eb' }}
               onClick={() => navigate('/ai-dashboard')}

@@ -17,6 +17,9 @@ This project accumulated multiple frontend folders during iterative development.
 - The root README now states the canonical location and updated start commands.
 - `frontend/` and `web-frontend/` were moved to archival locations (history preserved via `git mv`).
 
+### File resolution note (.web.js)
+Create React App resolves platform-specific extensions where provided. In the auth screens we maintain `LoginScreen.web.js` and `SignupScreen.web.js` as the authoritative web variants. Imports in `App.js` now explicitly reference these `.web.js` files to avoid ambiguity when `.js` files also exist in the same directory.
+
 ### How to run (web)
 ```bash
 # from repo root

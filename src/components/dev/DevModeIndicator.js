@@ -14,6 +14,8 @@ const DevModeIndicator = () => {
 
   useEffect(() => {
     const off = ApiEvents.on('backend_status', (s) => setStatus(s));
+  // Kick off an initial backend availability check on mount so we populate fast
+  recheckBackend().then(setStatus).catch(() => {});
     return () => { if (off) off(); };
   }, []);
 

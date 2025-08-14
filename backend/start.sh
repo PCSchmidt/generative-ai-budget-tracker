@@ -27,8 +27,9 @@ else
 fi
 
 # Start the FastAPI server
-echo "🌐 Starting uvicorn server at http://localhost:8000"
-UVICORN_CMD=(uvicorn app.main:app --host 0.0.0.0 --port 8000)
+PORT="${PORT:-8000}"
+echo "🌐 Starting uvicorn server at http://0.0.0.0:${PORT}"
+UVICORN_CMD=(uvicorn app.main:app --host 0.0.0.0 --port "${PORT}")
 # Production should not use --reload; enable if DEV_MODE=1
 if [[ "${DEV_MODE:-0}" == "1" ]]; then
   UVICORN_CMD+=(--reload)
