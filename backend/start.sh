@@ -40,6 +40,26 @@ fi
 PORT="${PORT:-8000}"
 UVICORN_LOG_LEVEL="${UVICORN_LOG_LEVEL:-info}"
 echo "🌐 Starting uvicorn server at http://0.0.0.0:${PORT} (log-level=${UVICORN_LOG_LEVEL})"
+
+# Preflight diagnostics: ensure module import path is sane
+echo "📁 Directory listing (root):"
+ls -la || true
+echo "📁 Directory listing (./app):"
+ls -la app || true
+echo "🧪 Import check: app.main"
+python - <<'PY'
+import sys, traceback
+print('sys.path=', sys.path)
+try:
+  import app
+  from app import main  # noqa: F401
+  print('import app.main: OK')
+except Exception as e:
+  print('import app.main: FAILED:', e)
+  traceback.print_exc()
+  raise
+PY
+
 UVICORN_CMD=(uvicorn app.main:app --host 0.0.0.0 --port "${PORT}" --log-level "${UVICORN_LOG_LEVEL}" --access-log)
 # Production should not use --reload; enable if DEV_MODE=1
 if [[ "${DEV_MODE:-0}" == "1" ]]; then
