@@ -8,8 +8,8 @@ echo "📂 Current directory: $(pwd)"
 echo "🐍 Python version: $(python --version)"
 echo "🛠️  Shell options: -euo pipefail"
 
-# Add current directory to Python path (handle unset PYTHONPATH under set -u)
-export PYTHONPATH="${PYTHONPATH:-}:$(pwd)"
+# Add current directory and ./app to Python path (handle unset under set -u)
+export PYTHONPATH="${PYTHONPATH:-}:$(pwd):$(pwd)/app"
 
 # Basic runtime diagnostics (do NOT print secrets)
 if [[ -n "${SECRET_KEY:-}" ]]; then
@@ -60,7 +60,8 @@ except Exception as e:
   raise
 PY
 
-UVICORN_CMD=(uvicorn app.main:app --host 0.0.0.0 --port "${PORT}" --log-level "${UVICORN_LOG_LEVEL}" --access-log)
+# Prefer app-dir to avoid import path issues; target `main:app`
+UVICORN_CMD=(uvicorn main:app --app-dir app --host 0.0.0.0 --port "${PORT}" --log-level "${UVICORN_LOG_LEVEL}" --access-log)
 # Production should not use --reload; enable if DEV_MODE=1
 if [[ "${DEV_MODE:-0}" == "1" ]]; then
   UVICORN_CMD+=(--reload)
