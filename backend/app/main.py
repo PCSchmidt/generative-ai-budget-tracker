@@ -509,6 +509,15 @@ async def cached_spending_insights(expenses: list, user_id: str | None):
 async def root():
     return {"message": "AI Budget Tracker API", "version": "2.0.0", "status": "running"}
 
+# Lightweight readiness probe that always returns 200 once the app is started
+@app.get("/ready")
+async def ready():
+    return {
+        "ok": True,
+        "version": "2.0.0",
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
 @app.get("/health")
 async def health_check(db: Session = Depends(get_db)):
     """Comprehensive health check including DB, AI subsystem status, migration revision, and uptime."""
