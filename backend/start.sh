@@ -46,18 +46,20 @@ echo "📁 Directory listing (root):"
 ls -la || true
 echo "📁 Directory listing (./app):"
 ls -la app || true
-echo "🧪 Import check: app.main"
+echo "🧪 Import check: main (with --app-dir app)"
 python - <<'PY'
-import sys, traceback
+import sys, traceback, importlib
 print('sys.path=', sys.path)
 try:
-  import app
-  from app import main  # noqa: F401
-  print('import app.main: OK')
+  # Ensure ./app is on path; uvicorn will also use --app-dir app
+  if '/app/app' not in sys.path:
+    sys.path.insert(0, '/app/app')
+  importlib.import_module('main')
+  print('import main: OK')
 except Exception as e:
-  print('import app.main: FAILED:', e)
+  print('import main: WARN:', e)
   traceback.print_exc()
-  raise
+  # Do not raise; continue to let uvicorn handle app loading
 PY
 
 # Prefer app-dir to avoid import path issues; target `main:app`
