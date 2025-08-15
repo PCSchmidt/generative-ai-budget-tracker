@@ -19,6 +19,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Copy application files (compatible with project-root build context)
 COPY backend/app ./app
+# Explicitly ensure main.py is present (helps catch context/path issues)
+COPY backend/app/main.py ./app/main.py
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/alembic ./alembic
 COPY backend/start.sh ./start.sh

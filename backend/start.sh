@@ -46,23 +46,24 @@ echo "📁 Directory listing (root):"
 ls -la || true
 echo "📁 Directory listing (./app):"
 ls -la app || true
-echo "🧪 Import check: main (with --app-dir app)"
+echo "🧪 Import check: app.main (package import)"
 python - <<'PY'
 import sys, traceback, importlib
 print('sys.path=', sys.path)
 try:
-  # Ensure ./app is on path; uvicorn will also use --app-dir app
+  # Ensure ./app is on path for package imports
   if '/app/app' not in sys.path:
     sys.path.insert(0, '/app/app')
-  importlib.import_module('main')
-  print('import main: OK')
+  importlib.import_module('app.main')
+  print('import app.main: OK')
 except Exception as e:
-  print('import main: WARN:', e)
+  print('import app.main: WARN:', e)
   traceback.print_exc()
   # Do not raise; continue to let uvicorn handle app loading
 PY
 
-# Prefer app-dir to avoid import path issues; target `main:app`
+# Start uvicorn against the package module path
+UVICORN_CMD=(uvicorn app.main:app --host 0.0.0.0 --port "${PORT}" --log-level "${UVICORN_LOG_LEVEL}" --access-log)
 UVICORN_CMD=(uvicorn main:app --app-dir app --host 0.0.0.0 --port "${PORT}" --log-level "${UVICORN_LOG_LEVEL}" --access-log)
 # Production should not use --reload; enable if DEV_MODE=1
 if [[ "${DEV_MODE:-0}" == "1" ]]; then
