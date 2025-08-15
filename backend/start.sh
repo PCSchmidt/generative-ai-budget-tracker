@@ -20,8 +20,9 @@ fi
 if command -v alembic >/dev/null 2>&1; then
   echo "🗃️ Running Alembic migrations..."
   alembic upgrade head || { echo "❌ Alembic migration failed"; exit 1; }
-  REV=$(alembic current 2>/dev/null | awk '{print $1}')
-  echo "✅ DB at migration revision: ${REV}" || true
+  # Capture current revision; tolerate failure in info command
+  REV="$( (alembic current 2>/dev/null | awk '{print $1}') || true )"
+  echo "✅ DB at migration revision: ${REV:-unknown}" || true
 else
   echo "⚠️ Alembic not installed; skipping migrations (NOT RECOMMENDED)." >&2
 fi
