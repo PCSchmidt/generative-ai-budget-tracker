@@ -4,14 +4,20 @@
 
 This frontend is designed to run on Vercel and point at a FastAPI backend on Railway.
 
+### Deployment Status (2025‑08‑14)
+- Frontend: Live on Vercel (temporary mock fallback enabled until backend is confirmed healthy)
+- Backend: Redeploy triggered with startup fix; verify in Railway web UI → backend service → Deploy Logs
+- Known fix applied: start script crash on unset `PYTHONPATH` (see `backend/start.sh`)
+
 ### Backend (Railway)
 - Expose `/health` returning HTTP 200.
-- Set env vars: `DATABASE_URL`, `JWT_SECRET_KEY`, and any provider keys.
+- Set env vars: `DATABASE_URL`, `SECRET_KEY` (strong), optional `FRONTEND_ORIGINS` or `FRONTEND_ORIGIN_REGEX`.
 - Configure CORS to allow your Vercel domain(s), e.g. `https://<project>.vercel.app`.
 
 ### Frontend (Vercel)
 - Environment Variables (Production):
    - `REACT_APP_API_BASE_URL=https://<your-railway-app>.up.railway.app`
+   - `REACT_APP_ALLOW_MOCK_PROD=false` (set to false after backend is healthy)
 - Build Command: `npm run build`
 - Output Directory: `build`
 - Auto-deploy `main` branch.
@@ -21,8 +27,15 @@ This frontend is designed to run on Vercel and point at a FastAPI backend on Rai
 2) Go to `/expenses` → Add an expense
 3) Open `/dashboard` → Confirm totals and charts update
 
+### Troubleshooting
+- If Railway CLI prints "No deployments found", open the Railway web UI for accurate Deploy/HTTP logs.
+- If the backend crashes on startup, check:
+  - SECRET_KEY is set and not default
+  - Database connectivity/migrations (Alembic)
+  - CORS origins (must include Vercel domain)
+
 Notes
-- In production, the app never falls back to the mock API; failures indicate backend issues.
+- In production, the app should not use mock API; disable fallback once backend is verified.
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![GitHub stars](https://img.shields.io/github/stars/PCSchmidt/generative-ai-budget-tracker.svg)](https://github.com/PCSchmidt/generative-ai-budget-tracker/stargazers)
 [![React](https://img.shields.io/badge/React-18.2.0-blue.svg)](https://reactjs.org/)
