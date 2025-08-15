@@ -18,9 +18,9 @@ RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements-light.txt
 
 # Copy application files (compatible with project-root build context)
+# Note: If Railway uses repository root as build context, these paths include
+# the backend/ prefix. If context is already backend/, Docker still resolves.
 COPY backend/app ./app
-# Explicitly ensure main.py is present (helps catch context/path issues)
-COPY backend/app/main.py ./app/main.py
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/alembic ./alembic
 COPY backend/start.sh ./start.sh

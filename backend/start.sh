@@ -62,9 +62,14 @@ except Exception as e:
   # Do not raise; continue to let uvicorn handle app loading
 PY
 
-# Start uvicorn against the package module path
+# Quick sanity check for app entrypoint
+if [[ ! -f "app/main.py" ]]; then
+  echo "❌ app/main.py not found. Listing app directory again for diagnostics:" >&2
+  ls -la app || true
+fi
+
+# Start uvicorn against the package module path (app.main:app)
 UVICORN_CMD=(uvicorn app.main:app --host 0.0.0.0 --port "${PORT}" --log-level "${UVICORN_LOG_LEVEL}" --access-log)
-UVICORN_CMD=(uvicorn main:app --app-dir app --host 0.0.0.0 --port "${PORT}" --log-level "${UVICORN_LOG_LEVEL}" --access-log)
 # Production should not use --reload; enable if DEV_MODE=1
 if [[ "${DEV_MODE:-0}" == "1" ]]; then
   UVICORN_CMD+=(--reload)
