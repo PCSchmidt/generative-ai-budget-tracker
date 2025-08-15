@@ -21,6 +21,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Note: If Railway uses repository root as build context, these paths include
 # the backend/ prefix. If context is already backend/, Docker still resolves.
 COPY backend/app ./app
+# Explicitly ensure main.py is present (double-check for context/path quirks)
+COPY backend/app/main.py ./app/main.py
 COPY backend/alembic.ini ./alembic.ini
 COPY backend/alembic ./alembic
 COPY backend/start.sh ./start.sh
