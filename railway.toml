@@ -5,4 +5,3 @@ dockerfilePath = "backend/Dockerfile.railway"
 [deploy]
 startCommand = "./start.sh"
 restartPolicyType = "always"
-healthcheckPath = "/health"

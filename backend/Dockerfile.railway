@@ -7,25 +7,20 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Copy only essential files first (handle project-root build context)
-# If Railway builds from the repository root, these paths must include the
-# backend/ prefix. If the context is already /backend, Docker will still find
-# the files because they exist relative to the root.
-COPY backend/requirements-light.txt requirements-light.txt
+# Copy only essential files first (assume build context is the backend/ dir)
+COPY requirements-light.txt requirements-light.txt
 
 # Install lightweight dependencies (NO gcc needed)
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements-light.txt
 
-# Copy application files (compatible with project-root build context)
-# Note: If Railway uses repository root as build context, these paths include
-# the backend/ prefix. If context is already backend/, Docker still resolves.
-COPY backend/app ./app
-# Explicitly ensure main.py is present (double-check for context/path quirks)
-COPY backend/app/main.py ./app/main.py
-COPY backend/alembic.ini ./alembic.ini
-COPY backend/alembic ./alembic
-COPY backend/start.sh ./start.sh
+# Copy application files
+COPY app ./app
+# Ensure main.py is present
+COPY app/main.py ./app/main.py
+COPY alembic.ini ./alembic.ini
+COPY alembic ./alembic
+COPY start.sh ./start.sh
 
 # Make script executable
 RUN chmod +x start.sh
