@@ -1,6 +1,9 @@
 [build]
 builder = "dockerfile"
 dockerfilePath = "backend/Dockerfile.railway"
+## NOTE: Railway builds with the repository root as the build context when the Dockerfile
+## resides in a subdirectory. Therefore the Dockerfile should COPY sources using 'backend/...'
+## paths (as adjusted) to avoid 'not found' during COPY steps.
 
 [deploy]
 startCommand = "./start.sh"

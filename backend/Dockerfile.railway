@@ -7,20 +7,21 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Copy only essential files first (assume build context is the backend/ dir)
-COPY requirements-light.txt requirements-light.txt
+# Copy only essential files first (Railway uses repo root as build context)
+# Hence, source paths are prefixed with 'backend/'.
+COPY backend/requirements-light.txt requirements-light.txt
 
 # Install lightweight dependencies (NO gcc needed)
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements-light.txt
 
-# Copy application files
-COPY app ./app
-# Ensure main.py is present
-COPY app/main.py ./app/main.py
-COPY alembic.ini ./alembic.ini
-COPY alembic ./alembic
-COPY start.sh ./start.sh
+# Copy application files from repo-root context
+COPY backend/app ./app
+# Ensure main.py is present (redundant but explicit)
+COPY backend/app/main.py ./app/main.py
+COPY backend/alembic.ini ./alembic.ini
+COPY backend/alembic ./alembic
+COPY backend/start.sh ./start.sh
 
 # Make script executable
 RUN chmod +x start.sh

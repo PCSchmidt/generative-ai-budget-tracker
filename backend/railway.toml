@@ -1,3 +1,8 @@
+## NOTE
+## This railway.toml is only used if you deploy from the backend/ directory directly.
+## The canonical project-level config lives at the repo root (../railway.toml), which
+## is what `railway up` typically uses when run from the repository root.
+## Keeping this file allows ad-hoc backend-only deploys without changing cwd.
 [build]
 builder = "dockerfile"
 dockerfilePath = "Dockerfile.railway"
