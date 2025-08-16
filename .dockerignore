@@ -1,0 +1,53 @@
+# Top-level Docker build context optimization for Railway
+# Keep backend/** included; exclude heavy/unnecessary stuff for backend image builds.
+
+# VCS and editor
+.git
+.gitignore
+.gitattributes
+.vscode/
+.vercel/
+
+# Environment and local config
+.env
+.env.*
+*.local
+
+# Node/JS artifacts
+node_modules/
+build/
+dist/
+.cache/
+.next/
+
+# Python artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.pytest_cache/
+.hypothesis/
+.mypy_cache/
+
+# Project folders not needed for backend image
+frontend/
+web-frontend/
+public/
+assets/
+src/
+docs/
+archive/
+mobile-dashboard.html
+priority4*.html
+*.ipynb
+
+# Test fixtures and local DBs
+tests/
+*.db
+
+# Docker Compose and local dev scripts (not needed in context)
+docker-compose*.yml
+start-dev.*
+start-local.*
