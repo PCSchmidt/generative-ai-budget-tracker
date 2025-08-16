@@ -41,10 +41,8 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
             ${{ env.IMAGE_NAME }}:latest
-          cache-from: |
-            type=registry,ref=${{ env.IMAGE_NAME }}:latest
-          cache-to: |
-            type=inline
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Output image
         run: |
