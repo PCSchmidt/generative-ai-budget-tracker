@@ -41,8 +41,6 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
             ${{ env.IMAGE_NAME }}:latest
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
           cache-from: |
             type=registry,ref=${{ env.IMAGE_NAME }}:latest
           cache-to: |
@@ -51,3 +49,4 @@ jobs:
       - name: Output image
         run: |
           echo "Pushed $IMAGE_NAME:sha-${GITHUB_SHA}"
+          echo "Use this image in Railway: $IMAGE_NAME:sha-${GITHUB_SHA}"
