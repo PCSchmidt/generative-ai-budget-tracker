@@ -163,6 +163,12 @@ mobile-dashboard.html
 # Exceptions needed for production deploys
 !backend/requirements-light.txt
 
+# Allow key documentation files to be tracked
+!README.md
+!DEPLOYMENT_GUIDE.md
+!docs/**
+!.github/**
+
 # Duplicate frontend directories (legacy)
 web-frontend/
 

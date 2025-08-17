@@ -46,7 +46,7 @@ QA Validation (Post-Deploy)
 - [ ] No CORS or mixed-content errors in Console
 
 Test Plan (Local)
-- Visit http://localhost:3000/login and sign in with demo@budgettracker.com / password123
+- Visit http://localhost:3000/login and sign in with demo@budgettracker.com / password123 (mock only)
 - Verify POST http://localhost:8000/auth/login → 200 with { access_token, user }
 - Navigate to /dashboard; verify expenses and AI panels render without runtime errors
 
@@ -59,6 +59,11 @@ Environment & Config (Production)
 - Vercel
   - NODE_ENV=production
   - Uses production API base URL (src/services/api.js logic)
+  - Ensure REACT_APP_API_BASE_URL points to Railway URL and REACT_APP_ALLOW_MOCK_PROD=false
+
+Signup & Credentials Notes
+- Demo credentials in the UI/docs are for mock mode only and will not work against the real backend unless that user exists in the DB.
+- In production, use Signup to create a real account (persisted in PostgreSQL), then log in with those credentials.
 
 Rollback Plan
 - Revert this commit and redeploy previous stable frontend/backend
