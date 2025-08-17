@@ -49,8 +49,7 @@ start-*.bat
 test-edit.txt
 DEPLOYMENT_READY.md
 
-# Duplicate frontend directories (consolidated to /frontend/)
-src/
+# Duplicate frontend directories (legacy) — keep only explicit legacy paths ignored
 web-frontend/
 
 # Development HTML files
@@ -164,11 +163,8 @@ mobile-dashboard.html
 # Exceptions needed for production deploys
 !backend/requirements-light.txt
 
-# Duplicate frontend directories (we use /frontend/)
+# Duplicate frontend directories (legacy)
 web-frontend/
-src/navigation/
-src/screens/main/
-src/screens/dashboard/DashboardScreenClean.js
 
 # Development scripts and test files
 start-*.sh

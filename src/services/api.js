@@ -20,8 +20,10 @@ function emit(event, payload) {
 }
 
 // API Configuration (allow override via CRA env var)
+// Prefer REACT_APP_API_BASE_URL; accept REACT_APP_BASE_URL as a legacy/alias
 const API_BASE_URL = (
   process.env.REACT_APP_API_BASE_URL?.trim() ||
+  process.env.REACT_APP_BASE_URL?.trim() ||
   (process.env.NODE_ENV === 'development'
     ? 'http://localhost:8000'  // Local development default
     : 'https://generative-ai-budget-tracker-production.up.railway.app' // Railway production default
@@ -46,6 +48,12 @@ class ApiService {
       this.useMockService = false;
       this.backendChecked = false;
     }
+
+    // Always log the resolved API base URL once at startup for easier prod debugging
+    try {
+      // eslint-disable-next-line no-console
+      console.info('[ApiService] Base URL:', this.baseURL);
+    } catch {}
   }
 
   // Public status getter for dev badge
@@ -246,8 +254,13 @@ class ApiService {
 
       return response;
     } catch (error) {
-      console.error('API Request failed:', error);
-      throw error;
+  // Provide a clearer message when fetch fails (commonly CORS or wrong base URL)
+  const method = (config && config.method) || 'GET';
+  const hint = 'This is usually a CORS issue on the backend or an incorrect REACT_APP_API_BASE_URL/REACT_APP_BASE_URL.';
+  const msg = `Network error for ${method} ${url} — ${hint} Original: ${error?.message || error}`;
+  // eslint-disable-next-line no-console
+  console.error('API Request failed:', msg);
+  throw new Error(msg);
     }
   }
 
